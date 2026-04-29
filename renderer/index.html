@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://trackercdn.com;">
+  <title>RL MMR Tracker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ── HEADER ── -->
+  <header class="header">
+    <div class="header-brand">
+      <span class="header-icon">🚀</span>
+      <span class="header-title">RL MMR Tracker</span>
+    </div>
+    <button id="btn-settings" class="btn-icon">⚙️ Configuración</button>
+  </header>
+
+  <!-- ── MAIN PANEL ── -->
+  <main id="main-panel">
+
+    <!-- Status & control -->
+    <section class="control-section">
+      <div class="status-indicator">
+        <span id="status-dot" class="dot dot-off"></span>
+        <span id="status-label">Detenido</span>
+      </div>
+      <button id="btn-toggle" class="btn-toggle start">▶ INICIAR</button>
+    </section>
+
+    <!-- Rank cards (rendered dynamically by app.js) -->
+    <section id="cards-section" class="cards-section"></section>
+
+    <!-- Today's record -->
+    <section class="record-section">
+      <span>📊 Partidos de hoy:&nbsp;</span>
+      <strong id="record-wins">0</strong>
+      <span>&nbsp;Ganados &nbsp;—&nbsp; Perdidos&nbsp;</span>
+      <strong id="record-losses">0</strong>
+    </section>
+
+    <!-- Activity log -->
+    <section class="log-section">
+      <div class="log-header">📋 Actividad</div>
+      <div id="log-list"></div>
+    </section>
+
+  </main>
+
+  <!-- ── SETTINGS OVERLAY ── -->
+  <div id="settings-overlay" class="overlay hidden">
+    <div class="settings-panel">
+
+      <div class="settings-header">
+        <h2>⚙️ Configuración</h2>
+        <button id="btn-close-settings" class="btn-icon">✕</button>
+      </div>
+
+      <div class="settings-body">
+
+        <div class="field-group">
+          <label for="cfg-platform">Plataforma</label>
+          <select id="cfg-platform">
+            <option value="epic">Epic Games</option>
+            <option value="steam">Steam</option>
+            <option value="psn">PlayStation (PSN)</option>
+            <option value="xbl">Xbox Live</option>
+          </select>
+          <p class="hint">La plataforma donde juegas Rocket League.</p>
+        </div>
+
+        <div class="field-group">
+          <label for="cfg-username">Nombre de usuario en el juego</label>
+          <input id="cfg-username" type="text" placeholder="Ej: SILIUS XIX YT" autocomplete="off">
+          <p class="hint">Tu nombre exacto en Rocket League (tal como aparece en
+            <em>rocketleague.tracker.network</em>). Los espacios se incluyen.</p>
+        </div>
+
+        <div class="field-group">
+          <label for="cfg-token">StreamElements JWT Token</label>
+          <div class="input-row">
+            <input id="cfg-token" type="password" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." autocomplete="off">
+            <button class="btn-eye" id="btn-eye-token">👁</button>
+          </div>
+          <p class="hint">
+            <strong>streamelements.com</strong> → tu avatar (arriba a la derecha) →
+            <em>Mi Cuenta</em> o <em>Channel settings</em> → pestaña <em>Channels</em> → copiar el <em>JWT Token</em> de Twitch.
+          </p>
+        </div>
+
+        <div class="field-group">
+          <label for="cfg-channelid">Channel ID</label>
+          <input id="cfg-channelid" type="text" placeholder="69f239c3" autocomplete="off">
+          <p class="hint">
+            <strong>streamelements.com</strong> → tu avatar (arriba a la derecha) →
+            <em>Mi Cuenta</em> o <em>Channel settings</em> → pestaña <em>Channels</em> → copiar el <em>Account ID</em> de Twitch (ej: <code>69f239c3…</code>).
+          </p>
+        </div>
+
+        <div class="field-group">
+          <label for="cfg-command">Nombre del comando de Twitch</label>
+          <div class="input-prefix">
+            <span class="prefix">!</span>
+            <input id="cfg-command" type="text" placeholder="rango">
+          </div>
+          <p class="hint">El comando que se actualizará automáticamente. No incluyas el <code>!</code>.</p>
+        </div>
+
+        <div class="field-group">
+          <label for="cfg-interval">Intervalo de actualización</label>
+          <div class="input-suffix">
+            <input id="cfg-interval" type="number" min="30" max="600" placeholder="60">
+            <span class="suffix">segundos</span>
+          </div>
+          <p class="hint">Cada cuántos segundos se consulta el tracker. Mínimo 30 s.<br>
+            <em>Nota:</em> el contador "Update in 3:18" que ves en tracker.gg es el caché del sitio web, no el tuyo.</p>
+        </div>
+
+        <div class="field-group">
+          <label>Modos a mostrar en el comando de Twitch</label>
+          <div id="modes-checklist" class="modes-checklist">
+            <p class="hint">Inicia el tracker una vez para ver los modos disponibles.</p>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="toggle-label">
+            <input type="checkbox" id="cfg-show-record" checked>
+            <span>Mostrar ganados/perdidos en el comando</span>
+          </label>
+          <p class="hint">Añade "📊 Hoy: 4 Ganados - Perdidos 1" al final del texto del bot. Se resetea a medianoche.</p>
+        </div>
+
+      </div>
+
+      <div id="test-result" class="test-result hidden"></div>
+
+      <div class="settings-footer">
+        <button id="btn-test" class="btn-secondary">🔌 Probar conexión</button>
+        <button id="btn-save" class="btn-primary">💾 Guardar</button>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>

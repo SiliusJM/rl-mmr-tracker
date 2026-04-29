@@ -1,0 +1,63 @@
+{
+  "name": "rl-mmr-tracker",
+  "version": "1.0.0",
+  "description": "Rocket League MMR Tracker — StreamElements auto-updater",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "start:cli": "node index.js",
+    "dist": "electron-builder --win --x64",
+    "dist:portable": "electron-builder --win portable --x64"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "build": {
+    "appId": "com.siliusxix.rl-mmr-tracker",
+    "productName": "RL MMR Tracker",
+    "copyright": "siliusxix",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**",
+      "streamElements.js",
+      "sessionTracker.js",
+      "scraper.js",
+      "index.js",
+      "node_modules/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "extraResources": []
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "cheerio": "^1.2.0",
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3",
+    "puppeteer": "^24.42.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
+  }
+}

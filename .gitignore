@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Electron builder cache
+.electron-builder.env
+
+# Puppeteer browser cache
+.local-chromium/
+.local-browsers/
+
+# User config (contains personal tokens — each user has their own)
+config.json
+ui-prefs.json
+modes-cache.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
