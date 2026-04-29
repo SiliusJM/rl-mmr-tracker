@@ -144,7 +144,7 @@ rl-mmr-tracker/
 └── .gitignore                 # config.json y tokens no se suben
 ```
 
-> **Seguridad:** `config.json` (que contiene tu nombre de usuario, JWT Token y Channel ID) esta en `.gitignore` y nunca se sube al repositorio. Cada usuario configura sus propios datos localmente.
+> **Seguridad:** `config.json` (contiene nombre de usuario, JWT Token y Channel ID) esta en `.gitignore` y nunca se sube a los repositorios. Cada usuario configura sus propios datos localmente.
 
 ---
 
