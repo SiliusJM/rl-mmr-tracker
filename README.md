@@ -122,6 +122,15 @@ Ranked Standard 3v3: Diamond III - Division I (994) | Hoy: 3 Ganados - 1 Perdido
 
 El "Update in 3:18" que ves en tracker.gg es el cache del **sitio web**, no el de esta app. La app consulta la API en el intervalo que configures (60 segundos por defecto, minimo 30 s).
 
+### Cuanto tarda en actualizarse el contador de Ganados/Perdidos?
+
+El contador de **📊 Partidos de hoy** en la UI y en el comando de chat se actualiza en cada ciclo de polling:
+
+- Con el intervalo por defecto de **60 segundos**, el contador puede tardar hasta **60 s** en reflejar el resultado de una partida.
+- El minimo configurable es **30 segundos**.
+- El contador detecta cambios comparando el MMR de cada modo entre ciclos: si sube es victoria, si baja es derrota.
+- Se resetea automaticamente a medianoche (cambio de dia).
+
 ---
 
 ## Estructura del proyecto

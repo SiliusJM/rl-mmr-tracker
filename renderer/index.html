@@ -35,7 +35,7 @@
     <section id="cards-section" class="cards-section"></section>
 
     <!-- Today's record -->
-    <section class="record-section">
+    <section id="record-section" class="record-section">
       <span>📊 Partidos de hoy:&nbsp;</span>
       <strong id="record-wins">0</strong>
       <span>&nbsp;Ganados &nbsp;—&nbsp; Perdidos&nbsp;</span>
@@ -44,7 +44,10 @@
 
     <!-- Activity log -->
     <section class="log-section">
-      <div class="log-header">📋 Actividad</div>
+      <div class="log-header">
+        <span>📋 Actividad</span>
+        <button id="btn-clear-log" class="btn-clear-log">🗑 Limpiar</button>
+      </div>
       <div id="log-list"></div>
     </section>
 

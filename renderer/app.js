@@ -185,26 +185,33 @@ window.tracker.onLog(addLog);
 window.tracker.onTrackerState(({ running: r }) => setStatus(r ? 'running' : 'off'));
 
 window.tracker.onDataUpdate(({ modes, session, selectedModeIds, showRecord }) => {
-  availableModes     = modes;
-  currentSelectedIds = selectedModeIds || [10, 11, 13, 28];
-  renderCards(modes, currentSelectedIds);
+  try {
+    availableModes     = modes;
+    currentSelectedIds = selectedModeIds || [10, 11, 13, 28];
+    renderCards(modes, currentSelectedIds);
 
-  // Only populate checklist if settings is open AND no checkboxes exist yet
-  // (i.e. still showing placeholder). Never overwrite edits in progress.
-  if (!settingsOverlay.classList.contains('hidden') &&
-      !document.querySelector('.mode-check')) {
-    refreshModeChecklist(currentSelectedIds);
-  }
-  if (showRecord) {
-    recordSection.style.display = '';
-    document.getElementById('record-wins').textContent   = session.wins;
-    document.getElementById('record-losses').textContent = session.losses;
-  } else {
-    recordSection.style.display = 'none';
+    // Only populate checklist if settings is open AND no checkboxes exist yet
+    // (i.e. still showing placeholder). Never overwrite edits in progress.
+    if (!settingsOverlay.classList.contains('hidden') &&
+        !document.querySelector('.mode-check')) {
+      refreshModeChecklist(currentSelectedIds);
+    }
+
+    const sec = document.getElementById('record-section');
+    if (sec) {
+      sec.style.display = showRecord ? '' : 'none';
+      if (showRecord) {
+        document.getElementById('record-wins').textContent   = session.wins;
+        document.getElementById('record-losses').textContent = session.losses;
+      }
+    }
+  } catch (err) {
+    console.error('[onDataUpdate]', err);
   }
 });
 
 /* ── Event listeners ── */
+document.getElementById('btn-clear-log').addEventListener('click', () => { logList.innerHTML = ''; });
 btnToggle.addEventListener('click', () => { if (running) stopTracker(); else startTracker(); });
 btnSettings.addEventListener('click', openSettings);
 btnCloseSettings.addEventListener('click', closeSettings);
@@ -220,12 +227,13 @@ window.tracker.getStatus().then(({ running, data }) => {
     availableModes     = data.modes;
     currentSelectedIds = data.selectedModeIds || [10, 11, 13, 28];
     renderCards(data.modes, currentSelectedIds);
-    if (data.showRecord) {
-      recordSection.style.display = '';
-      document.getElementById('record-wins').textContent   = data.session.wins;
-      document.getElementById('record-losses').textContent = data.session.losses;
-    } else {
-      recordSection.style.display = 'none';
+    const sec = document.getElementById('record-section');
+    if (sec) {
+      sec.style.display = data.showRecord ? '' : 'none';
+      if (data.showRecord) {
+        document.getElementById('record-wins').textContent   = data.session.wins;
+        document.getElementById('record-losses').textContent = data.session.losses;
+      }
     }
   }
 });
