@@ -8,9 +8,9 @@ Aplicacion de escritorio para streamers de Rocket League que rastrea tu MMR comp
 
 ## Capturas
 
-| Tracker activo | Configuracion | Resultado en Twitch |
-|---|---|---|
-| ![Tracker](assets/screenshots/tracker-activo.png) | ![Configuracion](assets/screenshots/configuracion.png) | ![Twitch](assets/screenshots/twitch-chat.png) |
+| Tracker activo | Configuracion | Resultado en Twitch | Temporadas | Configuracion temporadas y puerto | URL en OBS | OBS Vista |
+|---|---|---|---|---|---|---|
+| ![Tracker](assets/screenshots/tracker-activo.png) | ![Configuracion](assets/screenshots/configuracion.png) | ![Twitch](assets/screenshots/twitch-chat.png) | ![Temporadas](assets/screenshots/temporadas.png) | ![Configuracion-temporadas-puerto](assets/screenshots/configuracion-temporadas-puerto.png) | ![URL en OBS](assets/screenshots/url-obs.png) | ![OBS Vista](assets/screenshots/obs-vista.png) |
 
 > Para ver las capturas en GitHub se encuentra dentro de la carpeta `assets/screenshots/`.
 
