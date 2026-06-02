@@ -25,10 +25,11 @@ let currentDay = new Date().toDateString();
  */
 function updateSession(modesArray) {
   const today = new Date().toDateString();
+  const events = [];
   if (today !== currentDay) {
     wins = 0; losses = 0; prevMMR = null;
     currentDay = today;
-    console.log('[INFO] Nuevo día detectado — contadores de sesión reseteados.');
+    events.push({ msg: 'Nuevo día detectado — contadores de sesión reseteados.', type: 'info' });
   }
 
   // Build current MMR map: String(playlistId) → mmr
@@ -39,7 +40,7 @@ function updateSession(modesArray) {
 
   if (!prevMMR) {
     prevMMR = { ...currentMMR };
-    return { wins, losses, changed: false };
+    return { wins, losses, changed: false, events };
   }
 
   let changed = false;
@@ -48,16 +49,16 @@ function updateSession(modesArray) {
     if (prev == null || curr === prev) continue;
     if (curr > prev) {
       wins++;
-      console.log(`[INFO] Win detectado en modo ${id}: ${prev} → ${curr} MMR`);
+      events.push({ msg: `¡Victoria detectada! (+${curr - prev} MMR)`, type: 'success' });
     } else {
       losses++;
-      console.log(`[INFO] Loss detectado en modo ${id}: ${prev} → ${curr} MMR`);
+      events.push({ msg: `Derrota detectada (${curr - prev} MMR)`, type: 'warn' });
     }
     changed = true;
   }
 
   prevMMR = { ...currentMMR };
-  return { wins, losses, changed };
+  return { wins, losses, changed, events };
 }
 
 /**

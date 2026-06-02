@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('tracker', {
   getStatus:      ()    => ipcRenderer.invoke('get-status'),
   getModesCache:  ()    => ipcRenderer.invoke('get-modes-cache'),
   forcePoll:      ()    => ipcRenderer.invoke('force-poll'),
+  getObsInfo:     ()    => ipcRenderer.invoke('get-obs-info'),
 
   onLog:          (cb) => ipcRenderer.on('log',           (_e, d) => cb(d)),
   onTrackerState: (cb) => ipcRenderer.on('tracker-state', (_e, d) => cb(d)),

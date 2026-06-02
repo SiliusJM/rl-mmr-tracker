@@ -2,8 +2,8 @@
 
 /* ── State ── */
 let running        = false;
-let availableModes = [];           // last known list of mode objects from the API
-let currentSelectedIds = [10, 11, 13, 28]; // mirrors config.selectedModeIds
+let availableModes = [];
+let currentSelectedIds = [10, 11, 13, 28];
 
 /* ── DOM refs ── */
 const btnToggle        = document.getElementById('btn-toggle');
@@ -18,6 +18,10 @@ const logList          = document.getElementById('log-list');
 const testResult       = document.getElementById('test-result');
 const cardsSection     = document.getElementById('cards-section');
 const recordSection    = document.getElementById('record-section');
+const prev1Section     = document.getElementById('prev1-section');
+const prev2Section     = document.getElementById('prev2-section');
+const prev1Cards       = document.getElementById('prev1-cards');
+const prev2Cards       = document.getElementById('prev2-cards');
 
 /* ── Status ── */
 function setStatus(state) {
@@ -40,14 +44,15 @@ function addLog({ msg, type = 'info', time = new Date().toLocaleTimeString() }) 
 }
 
 /* ── Rank cards ── */
-function renderCards(modes, selectedIds) {
-  cardsSection.innerHTML = '';
+function renderCards(container, modes, selectedIds, dimClass) {
+  container.innerHTML = '';
   for (const mode of modes) {
     const selected = selectedIds.includes(mode.id);
     const card = document.createElement('div');
-    card.className = `mode-card${selected ? ' active' : ' dimmed'}`;
+    const cls  = dimClass || (selected ? 'active' : 'dimmed');
+    card.className = `mode-card ${cls}`;
     const iconHtml  = mode.iconUrl ? `<img class="rank-icon" src="${mode.iconUrl}" alt="${mode.rank}">` : '';
-    const badgeHtml = selected ? '' : '<div class="mode-badge">No en Twitch</div>';
+    const badgeHtml = (!dimClass && !selected) ? '<div class="mode-badge">No en Twitch</div>' : '';
     card.innerHTML = `
       <div class="mode-label">${mode.name}</div>
       ${iconHtml}
@@ -55,7 +60,7 @@ function renderCards(modes, selectedIds) {
       <div class="mode-mmr">${mode.mmr} MMR</div>
       ${badgeHtml}
     `;
-    cardsSection.appendChild(card);
+    container.appendChild(card);
   }
 }
 
@@ -78,23 +83,34 @@ function refreshModeChecklist(selectedIds) {
 }
 
 async function openSettings() {
-  // Load config and modes cache in parallel for speed
-  const [cfg, cached] = await Promise.all([
+  const [cfg, cached, obsInfo] = await Promise.all([
     window.tracker.loadConfig(),
     window.tracker.getModesCache(),
+    window.tracker.getObsInfo(),
   ]);
 
-  document.getElementById('cfg-platform').value = cfg.platform || 'epic';
-  document.getElementById('cfg-username').value  = decodeURIComponent(cfg.username || '');
-  document.getElementById('cfg-token').value     = cfg.streamElementsToken || '';
-  document.getElementById('cfg-channelid').value = cfg.channelId || '';
-  document.getElementById('cfg-command').value   = cfg.commandName || 'rango';
-  document.getElementById('cfg-interval').value  = Math.round((cfg.pollInterval || 60000) / 1000);
+  document.getElementById('cfg-platform').value  = cfg.platform || 'epic';
+  document.getElementById('cfg-username').value   = decodeURIComponent(cfg.username || '');
+  document.getElementById('cfg-token').value      = cfg.streamElementsToken || '';
+  document.getElementById('cfg-channelid').value  = cfg.channelId || '';
+  document.getElementById('cfg-command').value    = cfg.commandName || 'rango';
+  document.getElementById('cfg-interval').value   = Math.round((cfg.pollInterval || 60000) / 1000);
   document.getElementById('cfg-show-record').checked = cfg.showRecord !== false;
+  document.getElementById('cfg-show-prev1').checked  = cfg.showPrevSeason1 !== false;
+  document.getElementById('cfg-show-prev2').checked  = cfg.showPrevSeason2 === true;
+  document.getElementById('cfg-obs-port').value      = obsInfo.port || cfg.obsPort || 3030;
+  document.getElementById('cfg-obs-enabled').checked = cfg.obsEnabled !== false;
+
+  // OBS index URL
+  const obsPort = obsInfo.port || cfg.obsPort || 3030;
+  const obsUrl  = `http://localhost:${obsPort}`;
+  const obsLink = document.getElementById('obs-index-link');
+  if (obsLink) {
+    obsLink.href        = obsUrl;
+    obsLink.textContent = obsUrl;
+  }
 
   const selectedIds = cfg.selectedModeIds || [10, 11, 13, 28];
-
-  // Use in-memory modes if available, fall back to on-disk cache
   if (availableModes.length === 0 && cached && cached.length > 0) {
     availableModes = cached;
   }
@@ -120,6 +136,10 @@ function readSettingsForm() {
     pollInterval:        Math.max(30, parseInt(document.getElementById('cfg-interval').value, 10) || 60) * 1000,
     selectedModeIds:     checked.length > 0 ? checked : currentSelectedIds,
     showRecord:          document.getElementById('cfg-show-record').checked,
+    showPrevSeason1:     document.getElementById('cfg-show-prev1').checked,
+    showPrevSeason2:     document.getElementById('cfg-show-prev2').checked,
+    obsPort:             Math.max(1024, Number.parseInt(document.getElementById('cfg-obs-port').value, 10) || 3030),
+    obsEnabled:          document.getElementById('cfg-obs-enabled').checked,
   };
 }
 
@@ -128,8 +148,10 @@ async function saveSettings() {
   if (!cfg.username)            { alert('Ingresa tu nombre de usuario en el juego.'); return; }
   if (!cfg.streamElementsToken) { alert('Ingresa tu StreamElements JWT Token.'); return; }
   if (!cfg.channelId)           { alert('Ingresa tu Channel ID de StreamElements.'); return; }
-  await window.tracker.saveConfig(cfg);
   currentSelectedIds = cfg.selectedModeIds;
+  closeSettings();
+
+  await window.tracker.saveConfig(cfg);
   addLog({ msg: 'Configuración guardada.', type: 'success' });
   if (availableModes.length > 0) renderCards(availableModes, currentSelectedIds);
   closeSettings();
@@ -184,16 +206,26 @@ window.tracker.onLog(addLog);
 
 window.tracker.onTrackerState(({ running: r }) => setStatus(r ? 'running' : 'off'));
 
-window.tracker.onDataUpdate(({ modes, session, selectedModeIds, showRecord }) => {
+/* ── Season section helper ── */
+function applySeasonSection(section, cardsEl, modes, selectedIds, cssClass, visible) {
+  if (!section) return;
+  section.classList.toggle('hidden', !visible);
+  if (visible && modes) renderCards(cardsEl, modes, selectedIds, cssClass);
+}
+
+window.tracker.onDataUpdate(({ modes, prevSeason1, prevSeason2, session, selectedModeIds, showRecord, showPrevSeason1, showPrevSeason2 }) => {
   try {
     availableModes     = modes;
     currentSelectedIds = selectedModeIds || [10, 11, 13, 28];
-    renderCards(modes, currentSelectedIds);
 
-    // Only populate checklist if settings is open AND no checkboxes exist yet
-    // (i.e. still showing placeholder). Never overwrite edits in progress.
-    if (!settingsOverlay.classList.contains('hidden') &&
-        !document.querySelector('.mode-check')) {
+    renderCards(cardsSection, modes, currentSelectedIds, null);
+
+    applySeasonSection(prev1Section, prev1Cards, prevSeason1, currentSelectedIds, 'prev1',
+      showPrevSeason1 && Array.isArray(prevSeason1) && prevSeason1.length > 0);
+    applySeasonSection(prev2Section, prev2Cards, prevSeason2, currentSelectedIds, 'prev2',
+      showPrevSeason2 && Array.isArray(prevSeason2) && prevSeason2.length > 0);
+
+    if (!settingsOverlay.classList.contains('hidden') && !document.querySelector('.mode-check')) {
       refreshModeChecklist(currentSelectedIds);
     }
 
@@ -219,18 +251,31 @@ btnSave.addEventListener('click', saveSettings);
 btnTest.addEventListener('click', testConnection);
 settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) closeSettings(); });
 
+// OBS copy button
+const btnCopyObs = document.getElementById('btn-copy-obs');
+if (btnCopyObs) {
+  btnCopyObs.addEventListener('click', () => {
+    const link = document.getElementById('obs-index-link');
+    if (link) {
+      navigator.clipboard.writeText(link.href).catch(() => {});
+      btnCopyObs.textContent = '✔';
+      setTimeout(() => { btnCopyObs.textContent = '📋'; }, 1500);
+    }
+  });
+}
+
 /* ── Init ── */
 window.tracker.loadConfig().then(cfg => { currentSelectedIds = cfg.selectedModeIds || [10, 11, 13, 28]; });
-window.tracker.getStatus().then(({ running, data }) => {
-  if (running) setStatus('running');
+window.tracker.getStatus().then(({ running: r, data }) => {
+  if (r) setStatus('running');
   if (data) {
     availableModes     = data.modes;
     currentSelectedIds = data.selectedModeIds || [10, 11, 13, 28];
-    renderCards(data.modes, currentSelectedIds);
+    renderCards(cardsSection, data.modes, currentSelectedIds, null);
     const sec = document.getElementById('record-section');
     if (sec) {
       sec.style.display = data.showRecord ? '' : 'none';
-      if (data.showRecord) {
+      if (data.showRecord && data.session) {
         document.getElementById('record-wins').textContent   = data.session.wins;
         document.getElementById('record-losses').textContent = data.session.losses;
       }

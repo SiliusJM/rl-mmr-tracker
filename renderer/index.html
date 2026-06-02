@@ -31,8 +31,24 @@
       <button id="btn-toggle" class="btn-toggle start">▶ INICIAR</button>
     </section>
 
-    <!-- Rank cards (rendered dynamically by app.js) -->
+    <!-- Rank cards (current season) -->
     <section id="cards-section" class="cards-section"></section>
+
+    <!-- Previous season 1 cards -->
+    <section id="prev1-section" class="season-section hidden">
+      <div class="season-section-header prev1-header">
+        <span>&#9668; Temporada anterior</span>
+      </div>
+      <div id="prev1-cards" class="cards-section"></div>
+    </section>
+
+    <!-- Previous season 2 cards -->
+    <section id="prev2-section" class="season-section hidden">
+      <div class="season-section-header prev2-header">
+        <span>&#9668;&#9668; Hace 2 temporadas</span>
+      </div>
+      <div id="prev2-cards" class="cards-section"></div>
+    </section>
 
     <!-- Today's record -->
     <section id="record-section" class="record-section">
@@ -135,6 +151,41 @@
             <span>Mostrar ganados/perdidos en el comando</span>
           </label>
           <p class="hint">Añade "📊 Hoy: 4 Ganados - Perdidos 1" al final del texto del bot. Se resetea a medianoche.</p>
+        </div>
+
+        <div class="field-group">
+          <label for="cfg-show-prev1">Temporadas anteriores</label>
+          <label class="toggle-label">
+            <input type="checkbox" id="cfg-show-prev1" checked>
+            <span>Mostrar temporada anterior en el tracker</span>
+          </label>
+          <label class="toggle-label" style="margin-top:6px">
+            <input type="checkbox" id="cfg-show-prev2">
+            <span>Mostrar hace 2 temporadas atrás</span>
+          </label>
+          <p class="hint">Los datos de temporadas anteriores se cargan en segundo plano al iniciar el tracker por primera vez.</p>
+        </div>
+
+        <!-- ── OBS Overlay ── -->
+        <div class="field-group">
+          <label for="cfg-obs-port">OBS Overlay (Fuente de navegador)</label>
+          <div class="obs-url-row">
+            <a id="obs-index-link" class="obs-url-link" href="#" target="_blank">http://localhost:3030</a>
+            <button id="btn-copy-obs" class="btn-copy-obs" title="Copiar URL">📋</button>
+          </div>
+          <p class="hint">Abre la URL de arriba para ver todas las fuentes disponibles.<br>
+            En OBS: <em>Fuentes → + → Fuente de navegador</em> → pega la URL → activa <em>Fondo transparente</em>.</p>
+          <div class="field-group" style="margin-top:10px">
+            <label for="cfg-obs-port">Puerto del servidor OBS</label>
+            <div class="input-row">
+              <input id="cfg-obs-port" type="number" min="1024" max="65535" placeholder="3030" style="max-width:110px">
+              <label class="toggle-label" style="margin-left:12px">
+                <input type="checkbox" id="cfg-obs-enabled" checked>
+                <span>Habilitar servidor OBS</span>
+              </label>
+            </div>
+            <p class="hint">Cambiar el puerto requiere guardar y reiniciar la app.</p>
+          </div>
         </div>
 
       </div>

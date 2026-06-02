@@ -18,7 +18,20 @@ if (!gotLock) { app.quit(); process.exit(0); }
 app.on('second-instance', () => { if (mainWin) { if (mainWin.isMinimized()) mainWin.restore(); mainWin.focus(); } });
 const { updateCommand, testStreamElementsConnection } = require('./streamElements');
 const { updateSession }                               = require('./sessionTracker');
-const { scrapeProfile, closeBrowser }                 = require('./scraper');
+const { scrapeProfile, closeBrowser, resetPrevSeasonCache } = require('./scraper');
+const obsServer                                       = require('./obs-server');
+
+// Bridge to update renderer when background seasons are ready
+process.onUpdateSeasons = (seasons) => {
+  if (lastData) {
+    lastData.prevSeason1 = seasons.prev1;
+    lastData.prevSeason2 = seasons.prev2;
+    if (mainWin && !mainWin.isDestroyed()) {
+      mainWin.webContents.send('data-update', lastData);
+    }
+    obsServer.setData(lastData);
+  }
+};
 
 // ── Modes cache ───────────────────────────────────────────────────────────────
 // Persists the list of modes to disk so Settings can show checkboxes even before
@@ -56,6 +69,10 @@ const DEFAULT_CFG = {
   commandName: 'rango', pollInterval: 60000,
   selectedModeIds: [10, 11, 13, 28],
   showRecord: true,
+  obsPort: 3030,
+  obsEnabled: true,
+  showPrevSeason1: true,
+  showPrevSeason2: false,
 };
 
 function configPath() {
@@ -73,6 +90,34 @@ function loadConfig() {
 function saveConfig(cfg) {
   // Write ALL fields (including selectedModeIds and showRecord) to a single config.json.
   fs.writeFileSync(configPath(), JSON.stringify(cfg, null, 2), 'utf8');
+}
+
+async function applyLiveConfig(cfg) {
+  if (!lastData) return { applied: false };
+
+  const selectedIds = cfg.selectedModeIds || [10, 11, 13, 28];
+  const showRecord  = cfg.showRecord !== false;
+
+  lastData = {
+    ...lastData,
+    selectedModeIds: selectedIds,
+    showRecord,
+    showPrevSeason1: cfg.showPrevSeason1 !== false,
+    showPrevSeason2: cfg.showPrevSeason2 === true,
+  };
+
+  if (mainWin && !mainWin.isDestroyed()) {
+    mainWin.webContents.send('data-update', lastData);
+  }
+  obsServer.setData(lastData);
+
+  if (isTracking && cfg.channelId && cfg.streamElementsToken && lastData.modes) {
+    const response = buildResponse(lastData.modes, selectedIds, showRecord, lastData.session || { wins: 0, losses: 0 });
+    const ok = await updateCommand(cfg.channelId, cfg.commandName, cfg.streamElementsToken, response);
+    sendLog(ok ? 'Cambios aplicados al instante.' : 'Cambios aplicados localmente; no se pudo actualizar StreamElements.', ok ? 'success' : 'warn');
+  }
+
+  return { applied: true };
 }
 
 // ── Scraping delegado a scraper.js (puppeteer-extra + stealth) ───────────────
@@ -93,9 +138,13 @@ let lastData   = null;   // last successful poll result, for fresh renderer load
     const cfg = loadConfig();
     lastData = {
       modes:           cached,
+      prevSeason1:     null,
+      prevSeason2:     null,
       session:         { wins: 0, losses: 0 },
       selectedModeIds: cfg.selectedModeIds || [10, 11, 13, 28],
       showRecord:      cfg.showRecord !== false,
+      showPrevSeason1: cfg.showPrevSeason1 !== false,
+      showPrevSeason2: cfg.showPrevSeason2 === true,
     };
   }
 }());
@@ -133,7 +182,17 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(async () => {
+  // Start OBS overlay server
+  const cfg = loadConfig();
+  if (cfg.obsEnabled !== false) {
+    await obsServer.start(cfg.obsPort || 3030).catch(err =>
+      console.warn('[WARN] No se pudo iniciar el servidor OBS:', err.message)
+    );
+    if (lastData) obsServer.setData(lastData);
+  }
+  createWindow();
+});
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
 // ── IPC helpers ───────────────────────────────────────────────────────────────
@@ -144,12 +203,34 @@ function sendLog(msg, type = 'info') {
   console.log(`[${type.toUpperCase()}] ${msg}`);
 }
 
+// Global reference for the scraper to send logs to the UI
+global.sendLogToUI = sendLog;
+
 // ── IPC handlers ──────────────────────────────────────────────────────────────
 
 ipcMain.handle('load-config', () => loadConfig());
 
-ipcMain.handle('save-config', (_e, cfg) => {
+ipcMain.handle('save-config', async (_e, cfg) => {
+  const oldCfg = loadConfig();
   saveConfig(cfg);
+
+  // Restart OBS server if port changed or toggled on
+  const newPort = cfg.obsPort || 3030;
+  const oldPort = oldCfg.obsPort || 3030;
+  if (cfg.obsEnabled !== false) {
+    if (newPort !== oldPort || !obsServer.isRunning()) {
+      await obsServer.stop();
+      await obsServer.start(newPort).catch(err =>
+        console.warn('[WARN] No se pudo reiniciar el servidor OBS:', err.message)
+      );
+      if (lastData) obsServer.setData(lastData);
+    }
+  } else if (cfg.obsEnabled === false && obsServer.isRunning()) {
+    await obsServer.stop();
+  }
+
+  await applyLiveConfig(cfg);
+
   return true;
 });
 
@@ -177,12 +258,17 @@ ipcMain.handle('start-tracker', async () => {
   }
   sendLog('Conexión con StreamElements verificada.', 'success');
   if (mainWin) mainWin.webContents.send('tracker-state', { running: true });
+  resetPrevSeasonCache(); // fresh start — re-scrape previous seasons
   poll(cfg);
   return true;
 });
 
 ipcMain.handle('get-status',       () => ({ running: isTracking, data: lastData }));
 ipcMain.handle('get-modes-cache',  () => loadModesCache());
+ipcMain.handle('get-obs-info',     () => ({
+  port:    obsServer.getPort() || (loadConfig().obsPort || 3030),
+  running: obsServer.isRunning(),
+}));
 
 ipcMain.handle('force-poll', () => {
   if (!isTracking) return false;
@@ -206,17 +292,35 @@ async function poll(cfg) {
   if (!isTracking) return;
   try {
     sendLog('Consultando tracker.gg...', 'info');
-    const modes        = await scrapeProfile(cfg.platform, cfg.username);
+    const scraped      = await scrapeProfile(cfg.platform, cfg.username);
+    const modes        = scraped.modes;
     const sessionData  = updateSession(modes);
+
+    // Log detected events (wins/losses)
+    if (sessionData.events && sessionData.events.length > 0) {
+      for (const ev of sessionData.events) sendLog(ev.msg, ev.type);
+    }
+
     const selectedIds  = cfg.selectedModeIds || [10, 11, 13, 28];
     const showRecord   = cfg.showRecord !== false;
     const response     = buildResponse(modes, selectedIds, showRecord, sessionData);
 
     sendLog(response, 'update');
     saveModesCache(modes);
-    lastData = { modes, session: sessionData, selectedModeIds: selectedIds, showRecord };
-    if (mainWin && !mainWin.isDestroyed())
+    lastData = {
+      modes,
+      prevSeason1:     scraped.prevSeason1,
+      prevSeason2:     scraped.prevSeason2,
+      session:         sessionData,
+      selectedModeIds: selectedIds,
+      showRecord,
+      showPrevSeason1: cfg.showPrevSeason1 !== false,
+      showPrevSeason2: cfg.showPrevSeason2 === true,
+    };
+    if (mainWin && !mainWin.isDestroyed()) {
       mainWin.webContents.send('data-update', lastData);
+    }
+    obsServer.setData(lastData);
 
     const seOk = await updateCommand(cfg.channelId, cfg.commandName, cfg.streamElementsToken, response);
     sendLog(seOk ? 'Comando actualizado en StreamElements.' : 'No se pudo actualizar StreamElements.', seOk ? 'success' : 'warn');
