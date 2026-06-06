@@ -52,13 +52,53 @@ function saveModesCache(modes) {
 
 // ── Response builder ──────────────────────────────────────────────────────────
 
-function buildResponse(modes, selectedIds, showRecord, session) {
+function buildResponse(modes, selectedIds, showRecord, session, careerStats, cfg) {
   const selected = modes.filter(m => selectedIds.includes(m.id));
-  const parts    = selected.map(m => `${m.name}: ${m.rank} (${m.mmr})`);
-  const record   = showRecord
+  
+  // Formato del comando según configuración
+  const format = cfg.twitchCommandFormat || 'modes';
+  const showStats = cfg.twitchShowStats || false;
+  const statsToShow = cfg.twitchStatsToShow || [];
+  
+  let parts = [];
+  
+  // Siempre mostrar el emoji inicial
+  parts.push('🚀');
+  
+  // Formato 'modes': Solo modos ranqueados
+  if (format === 'modes' || format === 'both') {
+    const modeParts = selected.map(m => `${m.name}: ${m.rank} (${m.mmr})`);
+    parts.push(...modeParts);
+  }
+  
+  // Formato 'stats' o 'both': Agregar estadísticas de carrera
+  if ((format === 'stats' || format === 'both') && careerStats && showStats && statsToShow.length > 0) {
+    const statsMap = {
+      'goals': `⚽ ${careerStats.goals} Goles`,
+      'shots': `🎯 ${careerStats.shots} Tiros`,
+      'saves': `🛡️ ${careerStats.saves} Salvadas`,
+      'assists': `🤝 ${careerStats.assists} Asistencias`,
+      'mvps': `⭐ ${careerStats.mvps} MVPs`,
+      'wins': `🏆 ${careerStats.wins} Ganados`,
+    };
+    
+    const statsParts = statsToShow
+      .filter(key => statsMap[key])
+      .map(key => statsMap[key]);
+    
+    if (statsParts.length > 0) {
+      parts.push(...statsParts);
+    }
+  }
+  
+  // Record de la sesión (opcional)
+  const record = showRecord
     ? `📊 Hoy: ${session.wins} Ganados - ${session.losses} Perdidos`
     : null;
-  return ['🚀', ...parts, ...(record ? [record] : [])].join(' | ');
+  
+  if (record) parts.push(record);
+  
+  return parts.join(' | ');
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -73,6 +113,10 @@ const DEFAULT_CFG = {
   obsEnabled: true,
   showPrevSeason1: true,
   showPrevSeason2: false,
+  // Nuevas opciones para el comando de Twitch
+  twitchCommandFormat: 'modes', // 'modes', 'stats', 'both'
+  twitchShowStats: false,
+  twitchStatsToShow: [], // Array de: 'goals', 'shots', 'saves', 'assists', 'mvps', 'wins'
 };
 
 function configPath() {
@@ -112,7 +156,7 @@ async function applyLiveConfig(cfg) {
   obsServer.setData(lastData);
 
   if (isTracking && cfg.channelId && cfg.streamElementsToken && lastData.modes) {
-    const response = buildResponse(lastData.modes, selectedIds, showRecord, lastData.session || { wins: 0, losses: 0 });
+    const response = buildResponse(lastData.modes, selectedIds, showRecord, lastData.session || { wins: 0, losses: 0 }, lastData.careerStats, cfg);
     const ok = await updateCommand(cfg.channelId, cfg.commandName, cfg.streamElementsToken, response);
     sendLog(ok ? 'Cambios aplicados al instante.' : 'Cambios aplicados localmente; no se pudo actualizar StreamElements.', ok ? 'success' : 'warn');
   }
@@ -294,6 +338,7 @@ async function poll(cfg) {
     sendLog('Consultando tracker.gg...', 'info');
     const scraped      = await scrapeProfile(cfg.platform, cfg.username);
     const modes        = scraped.modes;
+    const careerStats  = scraped.careerStats;
     const sessionData  = updateSession(modes);
 
     // Log detected events (wins/losses)
@@ -303,12 +348,13 @@ async function poll(cfg) {
 
     const selectedIds  = cfg.selectedModeIds || [10, 11, 13, 28];
     const showRecord   = cfg.showRecord !== false;
-    const response     = buildResponse(modes, selectedIds, showRecord, sessionData);
+    const response     = buildResponse(modes, selectedIds, showRecord, sessionData, careerStats, cfg);
 
     sendLog(response, 'update');
     saveModesCache(modes);
     lastData = {
       modes,
+      careerStats,
       prevSeason1:     scraped.prevSeason1,
       prevSeason2:     scraped.prevSeason2,
       session:         sessionData,

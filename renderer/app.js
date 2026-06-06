@@ -101,6 +101,19 @@ async function openSettings() {
   document.getElementById('cfg-obs-port').value      = obsInfo.port || cfg.obsPort || 3030;
   document.getElementById('cfg-obs-enabled').checked = cfg.obsEnabled !== false;
 
+  // Nuevas opciones de Twitch
+  document.getElementById('cfg-twitch-format').value = cfg.twitchCommandFormat || 'modes';
+  document.getElementById('cfg-twitch-show-stats').checked = cfg.twitchShowStats || false;
+  
+  // Checkbox de estadísticas
+  const statsToShow = cfg.twitchStatsToShow || [];
+  document.querySelectorAll('.stat-check').forEach(cb => {
+    cb.checked = statsToShow.includes(cb.dataset.stat);
+  });
+  
+  // Mostrar/ocultar selector de stats
+  toggleStatsSelector();
+
   // OBS index URL
   const obsPort = obsInfo.port || cfg.obsPort || 3030;
   const obsUrl  = `http://localhost:${obsPort}`;
@@ -127,6 +140,8 @@ function closeSettings() {
 
 function readSettingsForm() {
   const checked = [...document.querySelectorAll('.mode-check:checked')].map(el => parseInt(el.dataset.id, 10));
+  const statsChecked = [...document.querySelectorAll('.stat-check:checked')].map(el => el.dataset.stat);
+  
   return {
     platform:            document.getElementById('cfg-platform').value.trim(),
     username:            document.getElementById('cfg-username').value.trim(),
@@ -140,6 +155,9 @@ function readSettingsForm() {
     showPrevSeason2:     document.getElementById('cfg-show-prev2').checked,
     obsPort:             Math.max(1024, Number.parseInt(document.getElementById('cfg-obs-port').value, 10) || 3030),
     obsEnabled:          document.getElementById('cfg-obs-enabled').checked,
+    twitchCommandFormat: document.getElementById('cfg-twitch-format').value,
+    twitchShowStats:     document.getElementById('cfg-twitch-show-stats').checked,
+    twitchStatsToShow:   statsChecked,
   };
 }
 
@@ -188,6 +206,46 @@ document.getElementById('btn-eye-token').addEventListener('click', function () {
   if (el.type === 'password') { el.type = 'text';     this.textContent = '🙈'; }
   else                        { el.type = 'password'; this.textContent = '👁';  }
 });
+
+/* ── Toggle stats selector ── */
+function toggleStatsSelector() {
+  const showStats = document.getElementById('cfg-twitch-show-stats').checked;
+  const format = document.getElementById('cfg-twitch-format').value;
+  const statsGroup = document.getElementById('stats-selector-group');
+  const statsToggleGroup = document.getElementById('twitch-stats-toggle-group');
+  const statsCheckbox = document.getElementById('cfg-twitch-show-stats');
+  
+  // Si el formato es "modes", deshabilitar el checkbox y ocultar todo
+  if (format === 'modes') {
+    if (statsCheckbox) {
+      statsCheckbox.disabled = true;
+      statsCheckbox.checked = false;
+    }
+    if (statsToggleGroup) {
+      statsToggleGroup.style.opacity = '0.5';
+      statsToggleGroup.style.pointerEvents = 'none';
+    }
+    if (statsGroup) {
+      statsGroup.style.display = 'none';
+    }
+  } else {
+    // Habilitar el checkbox para otros formatos
+    if (statsCheckbox) {
+      statsCheckbox.disabled = false;
+    }
+    if (statsToggleGroup) {
+      statsToggleGroup.style.opacity = '1';
+      statsToggleGroup.style.pointerEvents = 'auto';
+    }
+    // Mostrar selector solo si showStats está marcado
+    if (statsGroup) {
+      statsGroup.style.display = (showStats && (format === 'stats' || format === 'both')) ? '' : 'none';
+    }
+  }
+}
+
+document.getElementById('cfg-twitch-show-stats').addEventListener('change', toggleStatsSelector);
+document.getElementById('cfg-twitch-format').addEventListener('change', toggleStatsSelector);
 
 /* ── Tracker controls ── */
 async function startTracker() {

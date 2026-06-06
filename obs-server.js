@@ -18,6 +18,7 @@ let activePort = null;
 
 let latestData = {
   modes:           [],
+  careerStats:     null,
   prevSeason1:     null,
   prevSeason2:     null,
   session:         { wins: 0, losses: 0 },
@@ -33,7 +34,7 @@ function setData(data) {
 const BASE_CSS = `
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{background:transparent;-webkit-app-region:no-drag;
-  font-family:'Segoe UI',Arial,sans-serif;overflow:hidden}
+  font-family:'Segoe UI',Arial,sans-serif;height:100%;overflow-y:auto}
 `.trim();
 
 // ── /obs/card ─────────────────────────────────────────────────────────────────
@@ -194,6 +195,161 @@ upd();setInterval(upd,5000);
 </script></html>`;
 }
 
+// ── /obs/profile ──────────────────────────────────────────────────────────────
+
+function profilePageHtml() {
+  return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Perfil de Jugador</title>
+<style>
+${BASE_CSS}
+body{padding:20px 28px;background:#0a0a14;min-width:900px;max-width:1400px;margin:0 auto;overflow-y:auto}
+.header{display:flex;justify-content:flex-end;margin-bottom:20px}
+.last-update{font-size:12px;color:#666688}
+.section{background:rgba(13,13,26,.88);border:1.5px solid rgba(108,99,255,.35);
+  border-radius:14px;padding:24px;margin-bottom:18px;backdrop-filter:blur(4px)}
+.section-title{font-size:18px;font-weight:800;color:#a78bfa;margin-bottom:16px;
+  text-transform:uppercase;letter-spacing:1px}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px}
+.stat-box{background:rgba(21,21,43,.8);border:1px solid rgba(108,99,255,.25);
+  border-radius:10px;padding:16px;text-align:center}
+.stat-label{font-size:11px;color:#8888aa;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
+.stat-value{font-size:28px;font-weight:800;color:#e2e2f0}
+.peak-rank{margin-top:20px;text-align:center}
+.peak-title{font-size:13px;color:#fbbf24;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+.peak-icon{width:100px;height:100px;object-fit:contain;margin:0 auto 8px}
+.peak-name{font-size:20px;font-weight:700;color:#e2e2f0}
+.modes-grid{display:grid;grid-template-columns:repeat(3,minmax(280px,1fr));gap:16px;overflow-x:auto;padding-bottom:10px}
+.modes-grid::-webkit-scrollbar{height:8px}
+.modes-grid::-webkit-scrollbar-track{background:rgba(108,99,255,.1);border-radius:4px}
+.modes-grid::-webkit-scrollbar-thumb{background:rgba(108,99,255,.4);border-radius:4px}
+.modes-grid::-webkit-scrollbar-thumb:hover{background:rgba(108,99,255,.6)}
+.mode-card{background:rgba(21,21,43,.8);border:1.5px solid rgba(108,99,255,.45);
+  border-radius:12px;padding:20px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.mode-name{font-size:12px;color:#8888aa;text-transform:uppercase;letter-spacing:1.2px;font-weight:700}
+.mode-icon{width:90px;height:90px;object-fit:contain}
+.mode-rank{font-size:16px;font-weight:700;color:#e2e2f0;text-align:center}
+.mode-mmr{font-size:42px;font-weight:800;color:#a78bfa}
+.mode-stats{display:flex;gap:20px;margin-top:8px;font-size:12px}
+.mode-stat{display:flex;flex-direction:column;align-items:center;gap:2px}
+.mode-stat-label{color:#666688;font-size:10px;text-transform:uppercase;letter-spacing:.5px}
+.mode-stat-value{color:#e2e2f0;font-weight:700}
+.nodata{text-align:center;color:#666688;padding:40px;font-size:16px;font-style:italic}
+</style></head><body>
+<div id="app">
+  <div class="header">
+    <div class="last-update" id="last-update"></div>
+  </div>
+  
+  <div class="section">
+    <div class="section-title">📊 Estadísticas de la Carrera</div>
+    <div style="padding:10px 0;font-size:12px;color:#fbbf24;background:rgba(251,191,36,0.1);border-radius:8px;margin-bottom:10px;text-align:center">
+      ℹ️ Estas son estadísticas de toda tu carrera (lifetime), no solo de la temporada actual
+    </div>
+    <div class="stats-grid" id="career-stats">
+      <div class="nodata">Esperando datos del tracker...</div>
+    </div>
+  </div>
+  
+  <div class="section" id="peak-section" style="display:none">
+    <div class="section-title">🏆 Rango Mayor Alcanzado</div>
+    <div class="peak-rank" id="peak-rank"></div>
+  </div>
+  
+  <div class="section">
+    <div class="section-title">🎮 Temporada Actual - Visión General</div>
+    <div class="modes-grid" id="modes-grid">
+      <div class="nodata">Esperando datos del tracker...</div>
+    </div>
+  </div>
+</div>
+<script>
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function fmt(n){return new Intl.NumberFormat('es-ES').format(n||0);}
+
+// Calcular estadísticas acumuladas de la temporada actual
+function calculateSeasonStats(modes) {
+  const stats = {
+    matchesPlayed: 0,
+    wins: 0,
+    winRate: 0,
+  };
+  
+  if (!modes || modes.length === 0) return stats;
+  
+  modes.forEach(m => {
+    stats.matchesPlayed += m.matchesPlayed || 0;
+  });
+  
+  // Calcular wins aproximado (no disponible directo en API)
+  // Usamos la racha de victorias como indicador pero es aproximado
+  
+  return stats;
+}
+
+async function upd(){
+  try{
+    const r=await fetch('/api/data',{cache:'no-store'});
+    if(!r.ok)return;
+    const d=await r.json();
+    
+    // Last update
+    document.getElementById('last-update').textContent='Última actualización: '+new Date().toLocaleTimeString('es-ES');
+    
+    // Career stats
+    if(d.careerStats){
+      const cs=d.careerStats;
+      document.getElementById('career-stats').innerHTML=
+        '<div class="stat-box"><div class="stat-label">Tiros</div><div class="stat-value">'+fmt(cs.shots)+'</div></div>'+
+        '<div class="stat-box"><div class="stat-label">Goles</div><div class="stat-value">'+fmt(cs.goals)+'</div></div>'+
+        '<div class="stat-box"><div class="stat-label">Salvadas</div><div class="stat-value">'+fmt(cs.saves)+'</div></div>'+
+        '<div class="stat-box"><div class="stat-label">Asistencias</div><div class="stat-value">'+fmt(cs.assists)+'</div></div>'+
+        '<div class="stat-box"><div class="stat-label">MVP</div><div class="stat-value">'+fmt(cs.mvps)+'</div></div>'+
+        '<div class="stat-box"><div class="stat-label">Ganados</div><div class="stat-value">'+fmt(cs.wins)+'</div></div>';
+      
+      // Peak rank
+      if(cs.seasonRewardIcon){
+        document.getElementById('peak-section').style.display='';
+        document.getElementById('peak-rank').innerHTML=
+          '<div class="peak-title">Nivel de Recompensa de Temporada</div>'+
+          '<img class="peak-icon" src="'+esc(cs.seasonRewardIcon)+'" alt="'+esc(cs.seasonRewardName)+'">'+
+          '<div class="peak-name">'+esc(cs.seasonRewardName)+'</div>';
+      }
+    }
+    
+    // Season stats summary
+    if(d.modes && d.modes.length>0){
+      const seasonStats = calculateSeasonStats(d.modes);
+      const seasonStatsHtml = document.getElementById('season-stats-summary');
+      if(seasonStatsHtml && seasonStats.matchesPlayed > 0){
+        seasonStatsHtml.style.display='';
+        seasonStatsHtml.querySelector('.summary-value').textContent=fmt(seasonStats.matchesPlayed);
+      }
+    }
+    
+    // Modes
+    if(d.modes && d.modes.length>0){
+      const sel=d.selectedModeIds||d.modes.map(m=>m.id);
+      const modes=d.modes.filter(m=>sel.includes(m.id));
+      document.getElementById('modes-grid').innerHTML=modes.map(m=>{
+        const icon=m.iconUrl?'<img class="mode-icon" src="'+esc(m.iconUrl)+'" alt="">':'';
+        return '<div class="mode-card">'+
+          '<div class="mode-name">'+esc(m.name)+'</div>'+icon+
+          '<div class="mode-rank">'+esc(m.rank)+'</div>'+
+          '<div class="mode-mmr">'+m.mmr+'</div>'+
+          '<div class="mode-stats">'+
+            '<div class="mode-stat"><div class="mode-stat-label">Partidos</div><div class="mode-stat-value">'+fmt(m.matchesPlayed)+'</div></div>'+
+            (m.peakRating?'<div class="mode-stat"><div class="mode-stat-label">Pico MMR</div><div class="mode-stat-value">'+m.peakRating+'</div></div>':'')+
+          '</div>'+
+        '</div>';
+      }).join('');
+    }
+  }catch(e){console.error(e);}
+}
+upd();setInterval(upd,5000);
+</script></body></html>`;
+}
+
 // ── / index page ──────────────────────────────────────────────────────────────
 
 function indexPageHtml(port) {
@@ -225,6 +381,7 @@ a.link:hover{color:#a78bfa;text-decoration:underline}
 .tc{background:rgba(108,99,255,.2);color:#a78bfa}
 .tp1{background:rgba(251,191,36,.15);color:#fbbf24}
 .tp2{background:rgba(248,113,113,.15);color:#f87171}
+.tnew{background:rgba(52,211,153,.15);color:#34d399}
 .nodata{font-size:12px;color:#555577;padding:4px 14px;font-style:italic}
 .section{margin-top:4px}
 </style></head>
@@ -232,6 +389,17 @@ a.link:hover{color:#a78bfa;text-decoration:underline}
 <h1>\uD83D\uDE80 RL MMR Tracker \u2014 OBS Overlays</h1>
 <p class="sub">Agrega estas URLs como <strong>Fuente de navegador</strong> en OBS Studio
   &nbsp;&mdash;&nbsp; activa <em>Fondo transparente (sin color de pantalla)</em> en la fuente.</p>
+
+<h2>\uD83D\uDC64 Perfil Completo de Jugador</h2>
+<div class="grid">
+  <div class="row">
+    <span class="lbl">Perfil con estadísticas completas</span>
+    <a class="link" href="/obs/profile" target="_blank">http://localhost:${port}/obs/profile</a>
+  </div>
+  <p class="hint">Vista completa del perfil con estadísticas de carrera, rango mayor alcanzado y visión general de la temporada.<br>
+    <strong>Tamaño recomendado:</strong> <strong>1200 \u00D7 900</strong>&nbsp;px o pantalla completa.<br>
+    <em>Nota:</em> Esta vista NO requiere fondo transparente - tiene su propio fondo oscuro.</p>
+</div>
 
 <h2>\uD83D\uDCCA Sesi\u00F3n &mdash; Ganados / Perdidos</h2>
 <div class="grid">
@@ -329,6 +497,7 @@ function handleRequest(req, res) {
     '/obs/card':    cardPageHtml,
     '/obs/session': sessionPageHtml,
     '/obs/all':     allPageHtml,
+    '/obs/profile': profilePageHtml,
   };
   if (htmlRoutes[path]) {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });

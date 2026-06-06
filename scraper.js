@@ -18,6 +18,27 @@ puppeteer.use(StealthPlugin());
 // ── Mode data extractor ───────────────────────────────────────────────────────
 
 /**
+ * Extracts career stats from overview segment
+ */
+function extractCareerStats(seg) {
+  if (!seg || seg.type !== 'overview') return null;
+  
+  const stats = seg.stats || {};
+  return {
+    wins: stats.wins?.value || 0,
+    goals: stats.goals?.value || 0,
+    mvps: stats.mVPs?.value || 0,
+    saves: stats.saves?.value || 0,
+    assists: stats.assists?.value || 0,
+    shots: stats.shots?.value || 0,
+    goalShotRatio: stats.goalShotRatio?.value || 0,
+    seasonRewardLevel: stats.seasonRewardLevel?.value || 0,
+    seasonRewardIcon: stats.seasonRewardLevel?.metadata?.iconUrl || null,
+    seasonRewardName: stats.seasonRewardLevel?.metadata?.rankName || 'Sin rango',
+  };
+}
+
+/**
  * Extracts a mode object from a tracker.gg API segment.
  * Works for both current-season ('playlist' type) and historical segments.
  * Returns null if the segment lacks a playlistId or MMR value.
@@ -37,22 +58,52 @@ function extractModeData(seg) {
   const divName  = (seg.stats && seg.stats.division && seg.stats.division.metadata && seg.stats.division.metadata.name) || null;
   const rank     = (divName && tierName !== 'Supersonic Legend') ? `${tierName} - ${divName}` : tierName;
   const iconUrl  = (seg.stats && seg.stats.tier && seg.stats.tier.metadata && seg.stats.tier.metadata.iconUrl) || null;
+  
+  // Extract additional stats for profile view
+  const matchesPlayed = (seg.stats && seg.stats.matchesPlayed && seg.stats.matchesPlayed.value) || 0;
+  const winStreak = (seg.stats && seg.stats.winStreak && seg.stats.winStreak.value) || 0;
+  const winStreakType = (seg.stats && seg.stats.winStreak && seg.stats.winStreak.metadata && seg.stats.winStreak.metadata.type) || 'win';
+  const peakRating = (seg.stats && seg.stats.peakRating && seg.stats.peakRating.value) || null;
+  const peakTierName = (seg.stats && seg.stats.peakRating && seg.stats.peakRating.metadata && seg.stats.peakRating.metadata.tierName) || null;
+  const peakIconUrl = (seg.stats && seg.stats.peakRating && seg.stats.peakRating.metadata && seg.stats.peakRating.metadata.iconUrl) || null;
 
-  return { id, name, mmr: Math.round(mmr), rank, iconUrl };
+  return { 
+    id, 
+    name, 
+    mmr: Math.round(mmr), 
+    rank, 
+    iconUrl,
+    matchesPlayed,
+    winStreak,
+    winStreakType,
+    peakRating,
+    peakRank: peakTierName,
+    peakIconUrl
+  };
 }
 
 /**
  * Parses current-season segments (only type === 'playlist').
- * Returns array or null.
+ * Returns { modes, careerStats } or { modes: null, careerStats: null }.
  */
 function parseSegments(segments) {
   const modes = [];
+  let careerStats = null;
+  
   for (const seg of segments) {
+    if (seg.type === 'overview') {
+      careerStats = extractCareerStats(seg);
+      continue;
+    }
     if (seg.type !== 'playlist') continue;
     const m = extractModeData(seg);
     if (m) modes.push(m);
   }
-  return modes.length > 0 ? modes : null;
+  
+  return { 
+    modes: modes.length > 0 ? modes : null,
+    careerStats
+  };
 }
 
 /**
@@ -199,12 +250,15 @@ async function scrapeCurrentSeason(platform, username) {
     ]);
 
     const parsed = parseSegments(segments);
-    if (!parsed) {
+    if (!parsed.modes) {
       throw new Error('Segmentos recibidos pero ninguno tiene datos de MMR válidos.');
     }
 
     console.log('[INFO] Datos de temporada actual extraidos via intercepcion de red.');
-    return parsed;
+    return { 
+      modes: parsed.modes, 
+      careerStats: parsed.careerStats 
+    };
 
   } finally {
     await page.close().catch(() => {});
@@ -419,10 +473,10 @@ async function scrapePreviousSeasons(platform, username) {
  * scrapeProfile — scrapes current season data and returns previous season data
  * from the in-memory cache (populated asynchronously in the background).
  *
- * Returns: { modes: [...], prevSeason1: [...] | null, prevSeason2: [...] | null }
+ * Returns: { modes: [...], careerStats: {...}, prevSeason1: [...] | null, prevSeason2: [...] | null }
  */
 async function scrapeProfile(platform, username) {
-  const modes = await scrapeCurrentSeason(platform, username);
+  const currentData = await scrapeCurrentSeason(platform, username);
 
   // Kick off the previous-seasons scrape once per session (non-blocking)
   if (!prevSeasonCache.fetched) {
@@ -444,7 +498,8 @@ async function scrapeProfile(platform, username) {
   }
 
   return {
-    modes,
+    modes: currentData.modes,
+    careerStats: currentData.careerStats,
     prevSeason1: prevSeasonCache.prev1,
     prevSeason2: prevSeasonCache.prev2,
   };

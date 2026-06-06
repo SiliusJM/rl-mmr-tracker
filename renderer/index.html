@@ -153,6 +153,56 @@
           <p class="hint">Añade "📊 Hoy: 4 Ganados - Perdidos 1" al final del texto del bot. Se resetea a medianoche.</p>
         </div>
 
+        <!-- ── Twitch Command Format ── -->
+        <div class="field-group">
+          <label for="cfg-twitch-format">Formato del comando de Twitch</label>
+          <select id="cfg-twitch-format">
+            <option value="modes">Solo modos ranqueados (por defecto)</option>
+            <option value="stats">Solo estadísticas de carrera</option>
+            <option value="both">Modos + Estadísticas de carrera</option>
+          </select>
+          <p class="hint">Elige qué información mostrar cuando alguien usa el comando en tu chat.</p>
+        </div>
+
+        <div class="field-group" id="twitch-stats-toggle-group">
+          <label class="toggle-label">
+            <input type="checkbox" id="cfg-twitch-show-stats">
+            <span>Incluir estadísticas de carrera en el comando</span>
+          </label>
+          <p class="hint">Agrega estadísticas como goles, tiros, etc. al comando de Twitch.</p>
+        </div>
+
+        <div class="field-group" id="stats-selector-group" style="display:none">
+          <label>Estadísticas a mostrar en Twitch</label>
+          <div class="stats-checklist">
+            <label class="stat-check-label">
+              <input type="checkbox" class="stat-check" data-stat="goals">
+              <span>⚽ Goles</span>
+            </label>
+            <label class="stat-check-label">
+              <input type="checkbox" class="stat-check" data-stat="shots">
+              <span>🎯 Tiros</span>
+            </label>
+            <label class="stat-check-label">
+              <input type="checkbox" class="stat-check" data-stat="saves">
+              <span>🛡️ Salvadas</span>
+            </label>
+            <label class="stat-check-label">
+              <input type="checkbox" class="stat-check" data-stat="assists">
+              <span>🤝 Asistencias</span>
+            </label>
+            <label class="stat-check-label">
+              <input type="checkbox" class="stat-check" data-stat="mvps">
+              <span>⭐ MVPs</span>
+            </label>
+            <label class="stat-check-label">
+              <input type="checkbox" class="stat-check" data-stat="wins">
+              <span>🏆 Ganados</span>
+            </label>
+          </div>
+          <p class="hint">Selecciona qué estadísticas incluir (se mostrarán en el orden seleccionado).</p>
+        </div>
+
         <div class="field-group">
           <label for="cfg-show-prev1">Temporadas anteriores</label>
           <label class="toggle-label">

@@ -8,9 +8,13 @@ Aplicacion de escritorio para streamers de Rocket League que rastrea tu MMR comp
 
 ## Capturas
 
-| Tracker activo | Configuracion | Resultado en Twitch | Temporadas | Configuracion temporadas y puerto | URL en OBS | OBS Vista |
-|---|---|---|---|---|---|---|
-| ![Tracker](assets/screenshots/tracker-activo.png) | ![Configuracion](assets/screenshots/configuracion.png) | ![Twitch](assets/screenshots/twitch-chat.png) | ![Temporadas](assets/screenshots/temporadas.png) | ![Configuracion-temporadas-puerto](assets/screenshots/configuracion-temporadas-puerto.png) | ![URL en OBS](assets/screenshots/url-obs.png) | ![OBS Vista](assets/screenshots/obs-vista.png) |
+| Tracker activo | Configuracion | Resultado en Twitch | Temporadas |
+|---|---|---|---|
+| ![Tracker](assets/screenshots/tracker-activo.png) | ![Configuracion](assets/screenshots/configuracion.png) | ![Twitch](assets/screenshots/twitch-chat.png) | ![Temporadas](assets/screenshots/temporadas.png) |
+
+| Perfil Completo | Formato Comando Twitch | Estadísticas en Comando | URL en OBS |
+|---|---|---|---|
+| ![Perfil](assets/screenshots/perfil-completo.png) | ![Formato](assets/screenshots/formato-comando-twitch.png) | ![Stats](assets/screenshots/estadisticas-comando.png) | ![URL](assets/screenshots/url-obs.png) |
 
 > Para ver las capturas en GitHub se encuentra dentro de la carpeta `assets/screenshots/`.
 
@@ -18,12 +22,43 @@ Aplicacion de escritorio para streamers de Rocket League que rastrea tu MMR comp
 
 ## Caracteristicas
 
+### Tracking de MMR y Rangos
 - Muestra todos los modos clasificados de tu perfil (1v1, 2v2, 3v3, Rumble, Hoops, Dropshot, Snowday...)
 - **Modos auto-detectados desde la API** -- si Psyonix agrega o elimina un modo, la app lo refleja automaticamente sin actualizaciones
-- Selecciona que modos se incluyen en el comando de Twitch
 - Contador de ganados/perdidos del dia (se resetea a medianoche)
+- Soporte para temporadas anteriores (hasta 2 temporadas atrás)
+
+### Vista de Perfil Completo (OBS)
+- **URL:** `http://localhost:3030/obs/profile`
+- Estadísticas de la carrera: Tiros, Goles, Salvadas, Asistencias, MVPs, Ganados
+- Rango mayor alcanzado en la temporada
+- Visión general de todos tus modos ranqueados con:
+  - Rango y MMR actual
+  - Partidos jugados
+  - Pico de MMR alcanzado
+- Actualización automática cada 5 segundos
+- Diseño profesional con fondo oscuro
+- Grid de 3 columnas con scroll horizontal para ver todos los modos
+
+### Comando de Twitch Personalizable
+Elige qué información mostrar en tu chat:
+- **Solo modos:** Muestra rangos y MMR (comportamiento por defecto)
+- **Solo estadísticas:** Muestra goles, tiros, salvadas, etc. de toda la carrera
+- **Ambos:** Combinación de modos + estadísticas
+
+Selecciona exactamente qué estadísticas incluir:
+- ⚽ Goles
+- 🎯 Tiros
+- 🛡️ Salvadas
+- 🤝 Asistencias
+- ⭐ MVPs
+- 🏆 Ganados
+
+### Interfaz y Experiencia
 - UI oscura con log de actividad en tiempo real
 - Configuracion guardada localmente en `config.json` (no se sube a GitHub)
+- Servidor OBS integrado para overlays personalizados
+- Compatible con todas las plataformas: Epic Games, Steam, PlayStation, Xbox
 
 ---
 
@@ -112,9 +147,76 @@ El tracker esta disenado para correr en segundo plano sin afectar tu juego ni tu
 
 ## Ejemplo del comando en chat
 
+### Formato: Solo Modos (por defecto)
 ```
-Ranked Standard 3v3: Diamond III - Division I (994) | Hoy: 3 Ganados - 1 Perdidos
+🚀 Ranked Doubles 2v2: Champion II (1197) | Ranked Standard 3v3: Champion I (1162) | 📊 Hoy: 4 Ganados - 1 Perdidos
 ```
+
+### Formato: Solo Estadísticas
+```
+🚀 ⚽ 15,325 Goles | 🎯 34,176 Tiros | 🛡️ 13,818 Salvadas | 🤝 7,134 Asistencias
+```
+
+### Formato: Ambos
+```
+🚀 Ranked Doubles 2v2: Champion II (1197) | ⚽ 15,325 Goles | 🎯 34,176 Tiros | 📊 Hoy: 4 Ganados - 1 Perdidos
+```
+
+---
+
+## OBS Overlays
+
+El tracker incluye un servidor HTTP local que proporciona varias vistas para usar como fuentes de navegador en OBS:
+
+### Vista de Perfil Completo
+**URL:** `http://localhost:3030/obs/profile`
+
+Muestra tu perfil completo de Rocket League con:
+- Estadísticas de la carrera (Tiros, Goles, Salvadas, Asistencias, MVPs, Ganados)
+- Rango mayor alcanzado
+- Todos tus modos ranqueados con detalles completos
+
+**Configuración en OBS:**
+1. Fuentes → + → Fuente de navegador
+2. URL: `http://localhost:3030/obs/profile`
+3. Tamaño: 1200×900 px (recomendado)
+4. **NO** marcar "Fondo transparente" (la vista tiene su propio fondo)
+
+### Otras Vistas Disponibles
+Para ver todas las vistas disponibles (modos individuales, sesión, etc.), abre en tu navegador:
+```
+http://localhost:3030
+```
+
+**Nota:** El puerto por defecto es 3030, pero puedes cambiarlo en Configuración → OBS Overlay.
+
+---
+
+## Limitaciones Importantes
+
+### Estadísticas por Temporada
+
+Las estadísticas mostradas (Tiros, Goles, Salvadas, Asistencias, MVPs, Ganados) son de **TODA tu carrera** (lifetime), no solo de la temporada actual.
+
+**¿Por qué?**
+- La API de tracker.gg no proporciona estadísticas separadas por temporada
+- Epic Games no tiene una API pública para datos históricos por temporada
+- Los datos que ves en el cliente de Epic provienen de bases de datos privadas
+
+**Lo que SÍ está disponible por temporada (por modo):**
+- ✅ Partidos jugados
+- ✅ Racha de victorias/derrotas
+- ✅ Pico de MMR alcanzado
+- ✅ Rango actual
+
+**Lo que NO está disponible por temporada:**
+- ❌ Tiros de la temporada
+- ❌ Goles de la temporada
+- ❌ Salvadas de la temporada
+- ❌ Tiempo jugado
+- ❌ % de victorias exacto
+
+Esto es una limitación de las APIs públicas disponibles, no del tracker.
 
 ---
 
@@ -142,18 +244,42 @@ rl-mmr-tracker/
 ├── scraper.js                 # Scraper de tracker.gg (puppeteer-extra + stealth)
 ├── streamElements.js          # Cliente API de StreamElements
 ├── sessionTracker.js          # Contador de ganados/perdidos
+├── obs-server.js              # Servidor HTTP para overlays de OBS
 ├── renderer/
 │   ├── index.html             # UI principal
 │   ├── app.js                 # Logica del frontend
 │   └── style.css              # Tema oscuro
 ├── assets/
-│   └── screenshots/           # Capturas para el README (agrega las tuyas aqui)
-├── Iniciar.bat                # Lanzador Windows (auto-instala dependencias la primera vez)
+│   └── screenshots/           # Capturas para el README
+├── Iniciar.bat                # Lanzador Windows (auto-instala dependencias)
 ├── package.json
 └── .gitignore                 # config.json y tokens no se suben
 ```
 
 > **Seguridad:** `config.json` (contiene nombre de usuario, JWT Token y Channel ID) esta en `.gitignore` y nunca se sube a los repositorios. Cada usuario configura sus propios datos localmente.
+
+---
+
+## Changelog - Versión 1.2.0
+
+### Nuevas Funcionalidades
+
+**Vista de Perfil Completo para OBS**
+- Nueva URL: `http://localhost:3030/obs/profile`
+- Muestra estadísticas de carrera (Tiros, Goles, Salvadas, Asistencias, MVPs, Ganados)
+- Rango mayor alcanzado con icono
+- Visión general de todos los modos ranqueados
+- Actualización automática cada 5 segundos
+
+**Comando de Twitch Personalizable**
+- 3 formatos disponibles: Solo modos, Solo estadísticas, Ambos
+- Selección individual de qué estadísticas mostrar
+- Configuración flexible desde la interfaz
+
+**Mejoras en el Scraper**
+- Extracción de estadísticas de carrera (lifetime)
+- Datos extendidos por modo: partidos jugados, rachas, pico de MMR
+- Mejor manejo de datos de temporadas anteriores
 
 ---
 
