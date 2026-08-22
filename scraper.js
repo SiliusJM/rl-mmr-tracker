@@ -1,28 +1,23 @@
 'use strict';
 
 /**
- * scraper.js — tracker.gg Puppeteer scraper v2.0
+ * scraper.js — tracker.gg scraper optimized for frequent polling.
  *
- * Changes from v1:
- *  - scrapeProfile() now returns { modes, prevSeason1, prevSeason2 }
- *  - Previous season data is scraped once per session in the background
- *    by reading the current season and calling /segments/playlist?season=<id>.
+ * Performance changes:
+ *  - Reuses one browser page instead of navigating to tracker.gg every poll.
+ *  - Queries tracker.gg API directly with cache-busting timestamps.
+ *  - Removes the 500-1500ms random delay from normal polling.
+ *  - Keeps historical seasons completely off the hot polling path.
+ *  - Reuses the same page for historical-season requests.
  */
 
-const puppeteer          = require('puppeteer-extra');
-const StealthPlugin      = require('puppeteer-extra-plugin-stealth');
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const { executablePath } = require('puppeteer');
 puppeteer.use(StealthPlugin());
 
-
-// ── Mode data extractor ───────────────────────────────────────────────────────
-
-/**
- * Extracts career stats from overview segment
- */
 function extractCareerStats(seg) {
   if (!seg || seg.type !== 'overview') return null;
-  
   const stats = seg.stats || {};
   return {
     wins: stats.wins?.value || 0,
@@ -38,90 +33,80 @@ function extractCareerStats(seg) {
   };
 }
 
-/**
- * Extracts a mode object from a tracker.gg API segment.
- * Works for both current-season ('playlist' type) and historical segments.
- * Returns null if the segment lacks a playlistId or MMR value.
- */
 function extractModeData(seg) {
-  const rawId = seg.attributes && seg.attributes.playlistId;
+  const rawId = seg?.attributes?.playlistId;
   if (rawId == null) return null;
   const id = parseInt(rawId, 10);
-  if (isNaN(id)) return null;
+  if (Number.isNaN(id)) return null;
 
-  const mmr = seg.stats && seg.stats.rating && seg.stats.rating.value != null
-    ? seg.stats.rating.value : null;
-  if (mmr === null) return null;
+  const mmr = seg?.stats?.rating?.value;
+  if (mmr == null) return null;
 
-  const name     = (seg.metadata && seg.metadata.name) || `Modo ${id}`;
-  const tierName = (seg.stats && seg.stats.tier && seg.stats.tier.metadata && seg.stats.tier.metadata.name) || 'Sin rango';
-  const divName  = (seg.stats && seg.stats.division && seg.stats.division.metadata && seg.stats.division.metadata.name) || null;
-  const rank     = (divName && tierName !== 'Supersonic Legend') ? `${tierName} - ${divName}` : tierName;
-  const iconUrl  = (seg.stats && seg.stats.tier && seg.stats.tier.metadata && seg.stats.tier.metadata.iconUrl) || null;
-  
-  // Extract additional stats for profile view
-  const matchesPlayed = (seg.stats && seg.stats.matchesPlayed && seg.stats.matchesPlayed.value) || 0;
-  const winStreak = (seg.stats && seg.stats.winStreak && seg.stats.winStreak.value) || 0;
-  const winStreakType = (seg.stats && seg.stats.winStreak && seg.stats.winStreak.metadata && seg.stats.winStreak.metadata.type) || 'win';
-  const peakRating = (seg.stats && seg.stats.peakRating && seg.stats.peakRating.value) || null;
-  const peakTierName = (seg.stats && seg.stats.peakRating && seg.stats.peakRating.metadata && seg.stats.peakRating.metadata.tierName) || null;
-  const peakIconUrl = (seg.stats && seg.stats.peakRating && seg.stats.peakRating.metadata && seg.stats.peakRating.metadata.iconUrl) || null;
+  const name = seg?.metadata?.name || `Modo ${id}`;
+  const tierName = seg?.stats?.tier?.metadata?.name || 'Sin rango';
+  const divName = seg?.stats?.division?.metadata?.name || null;
+  const rank = (divName && tierName !== 'Supersonic Legend')
+    ? `${tierName} - ${divName}`
+    : tierName;
 
-  return { 
-    id, 
-    name, 
-    mmr: Math.round(mmr), 
-    rank, 
-    iconUrl,
-    matchesPlayed,
-    winStreak,
-    winStreakType,
-    peakRating,
-    peakRank: peakTierName,
-    peakIconUrl
+  return {
+    id,
+    name,
+    mmr: Math.round(mmr),
+    rank,
+    iconUrl: seg?.stats?.tier?.metadata?.iconUrl || null,
+    matchesPlayed: seg?.stats?.matchesPlayed?.value || 0,
+    winStreak: seg?.stats?.winStreak?.value || 0,
+    winStreakType: seg?.stats?.winStreak?.metadata?.type || 'win',
+    peakRating: seg?.stats?.peakRating?.value || null,
+    peakRank: seg?.stats?.peakRating?.metadata?.tierName || null,
+    peakIconUrl: seg?.stats?.peakRating?.metadata?.iconUrl || null,
   };
 }
 
-/**
- * Parses current-season segments (only type === 'playlist').
- * Returns { modes, careerStats } or { modes: null, careerStats: null }.
- */
 function parseSegments(segments) {
   const modes = [];
   let careerStats = null;
-  
-  for (const seg of segments) {
-    if (seg.type === 'overview') {
+
+  for (const seg of segments || []) {
+    if (seg?.type === 'overview') {
       careerStats = extractCareerStats(seg);
       continue;
     }
-    if (seg.type !== 'playlist') continue;
-    const m = extractModeData(seg);
-    if (m) modes.push(m);
+    if (seg?.type !== 'playlist') continue;
+    const mode = extractModeData(seg);
+    if (mode) modes.push(mode);
   }
-  
-  return { 
-    modes: modes.length > 0 ? modes : null,
-    careerStats
-  };
+
+  return { modes: modes.length ? modes : null, careerStats };
 }
 
-/**
- * Parses any segments that have a playlistId + MMR (used for historical seasons).
- * Returns array or null.
- */
 function parseSeasonSegments(segments) {
   const modes = [];
-  for (const seg of segments) {
-    const m = extractModeData(seg);
-    if (m) modes.push(m);
+  for (const seg of segments || []) {
+    const mode = extractModeData(seg);
+    if (mode) modes.push(mode);
   }
-  return modes.length > 0 ? modes : null;
+  return modes.length ? modes : null;
 }
 
-// ── Browser singleton ─────────────────────────────────────────────────────────
+function extractSegmentsFromPayload(json) {
+  if (Array.isArray(json?.data?.segments)) return json.data.segments;
+  if (Array.isArray(json?.data)) return json.data;
+  return null;
+}
+
+function detectCurrentSeason(segments) {
+  const seasons = (segments || [])
+    .map(seg => seg?.attributes?.season ?? seg?.attributes?.seasonId)
+    .map(v => parseInt(v, 10))
+    .filter(v => !Number.isNaN(v));
+  return seasons.length ? Math.max(...seasons) : null;
+}
 
 let browser = null;
+let apiPage = null;
+let pagePromise = null;
 
 async function getBrowser() {
   if (browser && browser.connected) return browser;
@@ -140,166 +125,118 @@ async function getBrowser() {
   });
 
   browser.on('disconnected', () => {
-    console.warn('[WARN] Navegador cerrado inesperadamente. Se reiniciara en el proximo ciclo.');
     browser = null;
+    apiPage = null;
+    pagePromise = null;
   });
 
   return browser;
 }
 
+async function getApiPage() {
+  if (apiPage && !apiPage.isClosed()) return apiPage;
+  if (pagePromise) return pagePromise;
+
+  pagePromise = (async () => {
+    const br = await getBrowser();
+    const page = await br.newPage();
+    await page.setExtraHTTPHeaders({ 'Accept-Language': 'es-ES,es;q=0.9' });
+    await page.setUserAgent(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+      '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+    );
+    await page.setViewport({ width: 1366, height: 768 });
+
+    // Establish tracker.gg origin once. Subsequent polls use fetch() only.
+    await page.goto('https://rocketleague.tracker.network/', {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000,
+    }).catch(() => {});
+
+    apiPage = page;
+    return page;
+  })();
+
+  try {
+    return await pagePromise;
+  } finally {
+    pagePromise = null;
+  }
+}
+
 async function closeBrowser() {
+  apiPage = null;
+  pagePromise = null;
   if (browser) {
     await browser.close().catch(() => {});
     browser = null;
   }
 }
 
-function randomDelay(minMs, maxMs) {
-  const ms = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function apiProfileUrl(platform, username) {
   return `https://api.tracker.gg/api/v2/rocket-league/standard/profile/${platform}/${encodeURIComponent(username)}`;
 }
 
-function extractSegmentsFromPayload(json) {
-  if (Array.isArray(json?.data?.segments)) return json.data.segments;
-  if (Array.isArray(json?.data)) return json.data;
-  return null;
-}
-
-function detectCurrentSeason(segments) {
-  const seasons = (segments || [])
-    .map(seg => seg?.attributes?.season ?? seg?.attributes?.seasonId)
-    .map(season => parseInt(season, 10))
-    .filter(season => !isNaN(season));
-
-  return seasons.length > 0 ? Math.max(...seasons) : null;
-}
-
 async function fetchTrackerJson(page, url) {
   const result = await page.evaluate(async (targetUrl) => {
-    const res = await fetch(targetUrl, { cache: 'no-store' });
-    const text = await res.text();
+    const separator = targetUrl.includes('?') ? '&' : '?';
+    const cacheBustedUrl = `${targetUrl}${separator}_=${Date.now()}`;
 
-    try {
-      return { ok: res.ok, status: res.status, json: JSON.parse(text) };
-    } catch {
-      return { ok: res.ok, status: res.status, json: null, text: text.slice(0, 200) };
-    }
+    const res = await fetch(cacheBustedUrl, {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'include',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, max-age=0',
+        'Pragma': 'no-cache',
+        'Accept': 'application/json',
+      },
+    });
+
+    const text = await res.text();
+    let json = null;
+    try { json = JSON.parse(text); } catch {}
+    return {
+      ok: res.ok,
+      status: res.status,
+      json,
+      text: text.slice(0, 200),
+    };
   }, url);
 
   if (!result.ok) throw new Error(`Tracker API respondio HTTP ${result.status}`);
   if (!result.json) throw new Error('Tracker API no devolvio JSON valido.');
-
   return result.json;
 }
 
-// ── Current-season scrape ─────────────────────────────────────────────────────
-
 async function scrapeCurrentSeason(platform, username) {
-  const pageUrl    = `https://rocketleague.tracker.network/rocket-league/profile/${platform}/${username}/overview`;
-  const apiPattern = /api\.tracker\.gg\/api\/v2\/rocket-league\/standard\/profile\//i;
+  const page = await getApiPage();
+  const apiBase = apiProfileUrl(platform, username);
+  const json = await fetchTrackerJson(page, apiBase);
+  const segments = extractSegmentsFromPayload(json);
 
-  const br   = await getBrowser();
-  const page = await br.newPage();
+  if (!segments) throw new Error('Tracker API no devolvio segmentos de perfil.');
 
-  try {
-    // Avoid detection
-    await page.setExtraHTTPHeaders({ 'Accept-Language': 'es-ES,es;q=0.9' });
-    await page.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-      '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-    );
-    await page.setViewport({ width: 1366, height: 768 });
+  const parsed = parseSegments(segments);
+  if (!parsed.modes) throw new Error('Tracker API devolvio segmentos sin MMR valido.');
 
-    // Set up response interception BEFORE navigation
-    let apiData = null;
-    const apiPromise = new Promise((resolve) => {
-      page.on('response', async (res) => {
-        if (apiData) return; // already captured
-        if (!apiPattern.test(res.url())) return;
-        // Only the profile endpoint (not sessions/matches)
-        if (res.url().includes('/sessions') || res.url().includes('/matches')) return;
-        try {
-          const json = await res.json();
-          if (json && json.data && Array.isArray(json.data.segments)) {
-            apiData = json.data.segments;
-            resolve(apiData);
-          }
-        } catch { /* not JSON or wrong shape */ }
-      });
-    });
-
-    await randomDelay(500, 1500);
-
-    // Navigate — the page will fire the API call automatically
-    const navResponse = await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    const status = navResponse && navResponse.status();
-    if (status === 404) throw new Error('Perfil no encontrado (404). Verifica platform y username.');
-    if (status === 403) throw new Error('Acceso bloqueado por el sitio (403).');
-    if (status && status >= 400) throw new Error(`Sitio respondio HTTP ${status}`);
-
-    // Wait up to 20 seconds for the API response to be intercepted
-    const segments = await Promise.race([
-      apiPromise,
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Timeout esperando respuesta de API (20s)')), 20000)
-      ),
-    ]);
-
-    const parsed = parseSegments(segments);
-    if (!parsed.modes) {
-      throw new Error('Segmentos recibidos pero ninguno tiene datos de MMR válidos.');
-    }
-
-    console.log('[INFO] Datos de temporada actual extraidos via intercepcion de red.');
-    return { 
-      modes: parsed.modes, 
-      careerStats: parsed.careerStats 
-    };
-
-  } finally {
-    await page.close().catch(() => {});
-  }
+  return { modes: parsed.modes, careerStats: parsed.careerStats };
 }
-
-
-// ── Previous-seasons scrape (background, one-time per session) ────────────────
 
 let prevSeasonCache = { prev1: null, prev2: null, fetched: false };
 
 async function scrapePreviousSeasonsDirect(platform, username) {
-  const overviewUrl = `https://rocketleague.tracker.network/rocket-league/profile/${platform}/${encodeURIComponent(username)}/overview`;
+  const page = await getApiPage();
   const apiBase = apiProfileUrl(platform, username);
 
-  const br   = await getBrowser();
-  const page = await br.newPage();
-
   try {
-    await page.setExtraHTTPHeaders({ 'Accept-Language': 'es-ES,es;q=0.9' });
-    await page.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-      '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-    );
-    await page.setViewport({ width: 1366, height: 768 });
-
-    await randomDelay(500, 1000);
     if (global.sendLogToUI) global.sendLogToUI('Detectando temporada actual de tracker.gg...', 'info');
 
-    const navResponse = await page.goto(overviewUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    const status = navResponse && navResponse.status();
-    if (status === 404) throw new Error('Perfil no encontrado (404). Verifica platform y username.');
-    if (status === 403) throw new Error('Acceso bloqueado por el sitio (403).');
-    if (status && status >= 400) throw new Error(`Sitio respondio HTTP ${status}`);
-
-    const profileJson = await fetchTrackerJson(page, `${apiBase}?`);
+    const profileJson = await fetchTrackerJson(page, apiBase);
     const currentSegments = extractSegmentsFromPayload(profileJson);
     const currentSeason = detectCurrentSeason(currentSegments);
 
     if (!currentSeason) {
-      console.log('[INFO] No se pudo detectar la temporada actual.');
       if (global.sendLogToUI) global.sendLogToUI('No se pudo detectar la temporada actual en tracker.gg.', 'warn');
       return { prev1: null, prev2: null };
     }
@@ -311,20 +248,16 @@ async function scrapePreviousSeasonsDirect(platform, username) {
       global.sendLogToUI(`Temporada actual detectada: ${currentSeason}. Buscando ${targetSeasons.join(' y ')}...`, 'info');
     }
 
+    // Historical data is deliberately sequential and outside the hot polling path.
     for (const seasonKey of targetSeasons) {
-      await randomDelay(400, 900);
       const json = await fetchTrackerJson(page, `${apiBase}/segments/playlist?season=${seasonKey}`);
       const segments = extractSegmentsFromPayload(json);
       const modes = Array.isArray(segments) ? parseSeasonSegments(segments) : null;
 
-      if (modes && modes.length > 0) {
+      if (modes?.length) {
         captured[String(seasonKey)] = modes;
         const msg = `Temporada ${seasonKey} capturada (${modes.length} modos).`;
         if (global.sendLogToUI) global.sendLogToUI(msg, 'info');
-        console.log(`[INFO] ${msg}`);
-      } else {
-        const msg = `Temporada ${seasonKey} no devolvio modos con MMR.`;
-        if (global.sendLogToUI) global.sendLogToUI(msg, 'warn');
         console.log(`[INFO] ${msg}`);
       }
     }
@@ -333,167 +266,29 @@ async function scrapePreviousSeasonsDirect(platform, username) {
       prev1: captured[String(targetSeasons[0])] || null,
       prev2: captured[String(targetSeasons[1])] || null,
     };
-
   } catch (err) {
     console.warn('[WARN] scrapePreviousSeasons fallo:', err.message);
     return { prev1: null, prev2: null };
-  } finally {
-    await page.close().catch(() => {});
   }
 }
 
-async function scrapePreviousSeasons(platform, username) {
-  // tracker.gg seasons page — the React router loads this as a tab,
-  // and the page fires API calls with ?season=<id> query params.
-  const seasonsUrl = `https://rocketleague.tracker.network/rocket-league/profile/${platform}/${username}/seasons`;
-  const apiPattern = /api\.tracker\.gg\/api\/v2\/rocket-league\/standard\/profile\//i;
-
-  const br   = await getBrowser();
-  const page = await br.newPage();
-
-  try {
-    await page.setExtraHTTPHeaders({ 'Accept-Language': 'es-ES,es;q=0.9' });
-    await page.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-      '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-    );
-    await page.setViewport({ width: 1366, height: 768 });
-
-    const captured = {}; // { [seasonKey]: modes[] }
-
-    page.on('response', async (res) => {
-      const url = res.url();
-      if (!apiPattern.test(url)) return;
-      if (url.includes('/sessions') || url.includes('/matches')) return;
-      try {
-        const json = await res.json();
-        // tracker.gg standard profile data is usually in json.data
-        // For segments, it's optionally under data.segments or just data
-        const segments = json?.data?.segments || (Array.isArray(json?.data) ? json.data : null);
-
-        if (Array.isArray(segments)) {
-          let seasonKey = null;
-
-          // 1. Try URL search params
-          try {
-            const u = new URL(url);
-            seasonKey = u.searchParams.get('season') || u.searchParams.get('seasonId');
-          } catch {}
-
-          // 2. Try to extract from metadata/attributes in the JSON
-          // Some responses have it in metadata.season (current) or attributes.seasonId (historical)
-          if (!seasonKey) {
-            const metaSeason = json?.data?.metadata?.season; 
-            if (metaSeason != null) seasonKey = String(metaSeason);
-          }
-
-          if (!seasonKey) {
-            const segWithSeason = segments.find(s => s.attributes && s.attributes.seasonId);
-            if (segWithSeason) seasonKey = String(segWithSeason.attributes.seasonId);
-          }
-
-          if (seasonKey) {
-            const modes = parseSeasonSegments(segments);
-            if (modes && modes.length > 0) {
-              // Only overwrite if we haven't captured this season or if we get more data
-              if (!captured[seasonKey] || modes.length >= captured[seasonKey].length) {
-                captured[seasonKey] = modes;
-                const msg = `Temporada ${seasonKey} capturada (${modes.length} modos).`;
-                if (global.sendLogToUI) global.sendLogToUI(msg, 'info');
-                console.log(`[INFO] ${msg}`);
-              }
-            }
-          }
-        }
-      } catch (e) {}
-    });
-
-    await randomDelay(500, 1000);
-    if (global.sendLogToUI) global.sendLogToUI('Navegando a la sección de temporadas...', 'info');
-    
-    const navResponse = await page.goto(seasonsUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    
-    // Check if we were redirected back to overview (common if seasons tab fails)
-    const currentUrl = page.url();
-    if (currentUrl.includes('/overview') && !seasonsUrl.includes('/overview')) {
-      if (global.sendLogToUI) global.sendLogToUI('Redirigido a Overview, reintentando acceso a temporadas...', 'warn');
-      await page.goto(seasonsUrl, { waitUntil: 'networkidle0', timeout: 30000 });
-    }
-
-    // High-latency waits and explicit clicks if needed
-    await new Promise(r => setTimeout(r, 5000));
-    
-    // Scroll multiple times to trigger all historical API calls
-    for (let i = 0; i < 3; i++) {
-      await page.evaluate(() => window.scrollBy(0, 1000));
-      await new Promise(r => setTimeout(r, 2000));
-    }
-    await page.evaluate(() => window.scrollTo(0, 0));
-
-    // Wait for the page's async API calls to finish processing
-    await new Promise(r => setTimeout(r, 10000));
-
-    // Sort season keys — numeric descending
-    const keys = Object.keys(captured)
-      .map(k => parseInt(k, 10))
-      .filter(k => !isNaN(k))
-      .sort((a, b) => b - a);
-
-    if (keys.length > 0) {
-      console.log(`[INFO] Temporadas encontradas: ${keys.join(', ')}`);
-      if (global.sendLogToUI) {
-        global.sendLogToUI(`Historial: Se detectaron las temporadas ${keys.join(', ')}.`, 'info');
-        if (keys.length > 1) {
-          global.sendLogToUI(`Asignando Temporada ${keys[1]} a "Anterior" y ${keys[2] || '?' } a "Hace 2 temporadas".`, 'success');
-        }
-      }
-    } else {
-      console.log('[INFO] No se encontraron datos de temporadas anteriores.');
-      if (global.sendLogToUI) global.sendLogToUI('No se detectaron temporadas en el historial de tracker.gg.', 'warn');
-    }
-
-    // Assining prev1 (last season) and prev2 (two seasons ago)
-    return {
-      prev1: (keys[1] != null) ? captured[String(keys[1])] : null,
-      prev2: (keys[2] != null) ? captured[String(keys[2])] : null,
-    };
-
-  } catch (err) {
-    console.warn('[WARN] scrapePreviousSeasons fallo:', err.message);
-    return { prev1: null, prev2: null };
-  } finally {
-    await page.close().catch(() => {});
-  }
-}
-
-
-// ── Public API ────────────────────────────────────────────────────────────────
-
-/**
- * scrapeProfile — scrapes current season data and returns previous season data
- * from the in-memory cache (populated asynchronously in the background).
- *
- * Returns: { modes: [...], careerStats: {...}, prevSeason1: [...] | null, prevSeason2: [...] | null }
- */
 async function scrapeProfile(platform, username) {
+  // Only the current profile is awaited. Historical seasons never block a poll.
   const currentData = await scrapeCurrentSeason(platform, username);
 
-  // Kick off the previous-seasons scrape once per session (non-blocking)
   if (!prevSeasonCache.fetched) {
-    prevSeasonCache.fetched = true; // prevent duplicate concurrent calls
+    prevSeasonCache.fetched = true;
     if (global.sendLogToUI) global.sendLogToUI('Iniciando descarga de temporadas anteriores...', 'info');
+
     scrapePreviousSeasonsDirect(platform, username)
       .then(seasons => {
         prevSeasonCache = { ...seasons, fetched: true };
-        if (global.sendLogToUI) global.sendLogToUI('Datos de temporadas anteriores cargados con éxito.', 'success');
-        // Notify main process to update UI/OBS
-        if (typeof process.onUpdateSeasons === 'function') {
-          process.onUpdateSeasons(prevSeasonCache);
-        }
+        if (global.sendLogToUI) global.sendLogToUI('Datos de temporadas anteriores cargados con exito.', 'success');
+        if (typeof process.onUpdateSeasons === 'function') process.onUpdateSeasons(prevSeasonCache);
       })
-      .catch((err) => {
-        if (global.sendLogToUI) global.sendLogToUI(`No se pudieron cargar las temporadas anteriores: ${err.message}`, 'error');
-        prevSeasonCache.fetched = false; // allow retry
+      .catch(err => {
+        console.warn('[WARN] Error cargando temporadas:', err.message);
+        prevSeasonCache.fetched = false;
       });
   }
 
@@ -505,7 +300,6 @@ async function scrapeProfile(platform, username) {
   };
 }
 
-/** Resets the previous-season cache (e.g. on tracker restart). */
 function resetPrevSeasonCache() {
   prevSeasonCache = { prev1: null, prev2: null, fetched: false };
 }
