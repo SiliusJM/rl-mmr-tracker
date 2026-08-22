@@ -3,8 +3,12 @@
 /**
  * main.js — Electron main process
  *
- * Polling is intentionally lightweight: scraper.js now keeps a warm page and
+ * Polling is intentionally lightweight: scraper.js keeps a warm page and
  * calls tracker.gg directly instead of navigating the web page every cycle.
+ *
+ * Fast mode: rlStatsApi.js listens to Rocket League's local Stats API. When a
+ * match-end event is received, the tracker performs short-interval retries
+ * (2s, 4s, 7s, 12s, 20s) until the published MMR changes.
  */
 
 const { app, BrowserWindow, ipcMain } = require('electron');
@@ -18,6 +22,7 @@ app.on('second-instance', () => { if (mainWin) { if (mainWin.isMinimized()) main
 const { updateCommand, testStreamElementsConnection } = require('./streamElements');
 const { updateSession } = require('./sessionTracker');
 const { scrapeProfile, closeBrowser, resetPrevSeasonCache } = require('./scraper');
+const rlStatsApi = require('./rlStatsApi');
 const obsServer = require('./obs-server');
 
 process.onUpdateSeasons = (seasons) => {
@@ -83,6 +88,10 @@ const DEFAULT_CFG = {
   twitchCommandFormat: 'modes',
   twitchShowStats: false,
   twitchStatsToShow: [],
+  fastPollEnabled: true,
+  fastPollDelays: [2000, 4000, 7000, 12000, 20000],
+  rlStatsApiHost: '127.0.0.1',
+  rlStatsApiPort: 49123,
 };
 
 function configPath() { return path.join(__dirname, 'config.json'); }
@@ -125,8 +134,12 @@ async function applyLiveConfig(cfg) {
 let mainWin;
 let isTracking = false;
 let pollTimer = null;
+let fastPollTimer = null;
+let fastPollGeneration = 0;
 let lastData = null;
 let lastPublishedResponse = null;
+let lastMatchEndAt = 0;
+let fastPollInProgress = false;
 
 (function initLastDataFromCache() {
   const cached = loadModesCache();
@@ -164,7 +177,9 @@ function createWindow() {
 
   mainWin.on('closed', () => {
     isTracking = false;
+    cancelFastPoll();
     if (pollTimer) clearTimeout(pollTimer);
+    rlStatsApi.stop();
     closeBrowser().catch(() => {});
     mainWin = null;
   });
@@ -186,6 +201,62 @@ function sendLog(msg, type = 'info') {
 }
 
 global.sendLogToUI = sendLog;
+
+function cancelFastPoll() {
+  fastPollGeneration++;
+  if (fastPollTimer) {
+    clearTimeout(fastPollTimer);
+    fastPollTimer = null;
+  }
+  fastPollInProgress = false;
+}
+
+function scheduleFastPoll(delayMs, generation) {
+  if (!isTracking || generation !== fastPollGeneration) return;
+  if (fastPollTimer) clearTimeout(fastPollTimer);
+
+  fastPollTimer = setTimeout(async () => {
+    fastPollTimer = null;
+    if (!isTracking || generation !== fastPollGeneration) return;
+    await poll(loadConfig(), { reason: 'match-end-fast', generation });
+  }, delayMs);
+}
+
+function startFastPoll(reason = 'match-end') {
+  if (!isTracking) return;
+  const cfg = loadConfig();
+  if (cfg.fastPollEnabled === false) return;
+
+  const now = Date.now();
+  // Prevent duplicate bursts from multiple Stats API lifecycle events.
+  if (now - lastMatchEndAt < 15000) return;
+  lastMatchEndAt = now;
+
+  cancelFastPoll();
+  fastPollInProgress = true;
+  const generation = fastPollGeneration;
+  const delays = Array.isArray(cfg.fastPollDelays) && cfg.fastPollDelays.length
+    ? cfg.fastPollDelays.map(Number).filter(n => Number.isFinite(n) && n >= 0)
+    : [2000, 4000, 7000, 12000, 20000];
+
+  sendLog(`🏁 Fin de partida detectado. Activando actualización rápida (${delays.map(d => d / 1000).join('/')}s)...`, 'success');
+  scheduleFastPoll(delays[0] || 0, generation);
+}
+
+function onStatsApiEvent({ event, data }) {
+  const normalized = String(event || '').toLowerCase().replace(/[\s-]+/g, '_');
+
+  // Match lifecycle names used by Stats API/client builds. We intentionally
+  // require both a match/game keyword and an end/finish keyword to avoid
+  // triggering on kickoff, goals, joins, or other normal events.
+  const isMatchEnd = (
+    /(?:match|game|playlist).*?(?:ended|end|finished|finish|complete|completed)/i.test(normalized) ||
+    /(?:ended|end|finished|finish|complete|completed).*?(?:match|game|playlist)/i.test(normalized)
+  );
+
+  if (!isMatchEnd) return;
+  startFastPoll('stats-api');
+}
 
 ipcMain.handle('load-config', () => loadConfig());
 
@@ -238,34 +309,53 @@ ipcMain.handle('start-tracker', async () => {
   if (mainWin) mainWin.webContents.send('tracker-state', { running: true });
   resetPrevSeasonCache();
   lastPublishedResponse = null;
+  cancelFastPoll();
+
+  // Stats API is optional. If Rocket League is closed or the API is disabled,
+  // the normal 10s polling continues without breaking the tracker.
+  if (cfg.fastPollEnabled !== false) {
+    rlStatsApi.start({
+      host: cfg.rlStatsApiHost || '127.0.0.1',
+      port: cfg.rlStatsApiPort || 49123,
+    });
+    sendLog('Detector de fin de partida iniciado.', 'info');
+  }
+
   poll(cfg);
   return true;
 });
 
-ipcMain.handle('get-status', () => ({ running: isTracking, data: lastData }));
+ipcMain.handle('get-status', () => ({ running: isTracking, data: lastData, fastPoll: fastPollInProgress, statsApiConnected: rlStatsApi.isConnected() }));
 ipcMain.handle('get-modes-cache', () => loadModesCache());
 ipcMain.handle('get-obs-info', () => ({ port: obsServer.getPort() || (loadConfig().obsPort || 3030), running: obsServer.isRunning() }));
 
 ipcMain.handle('force-poll', () => {
   if (!isTracking) return false;
   if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
-  setImmediate(() => poll(loadConfig()));
+  setImmediate(() => poll(loadConfig(), { reason: 'manual' }));
   return true;
 });
 
 ipcMain.handle('stop-tracker', () => {
   isTracking = false;
+  cancelFastPoll();
   if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+  rlStatsApi.stop();
   closeBrowser().catch(() => {});
   sendLog('Tracker detenido.', 'info');
   if (mainWin) mainWin.webContents.send('tracker-state', { running: false });
   return true;
 });
 
-async function poll(cfg) {
-  if (!isTracking) return;
+async function poll(cfg, meta = {}) {
+  if (!isTracking) return null;
   try {
-    sendLog('Consultando tracker.gg...', 'info');
+    if (meta.reason === 'match-end-fast') {
+      sendLog(`⚡ Consulta rápida de Tracker.gg (${meta.generation === fastPollGeneration ? 'post-partida' : 'normal'})...`, 'info');
+    } else {
+      sendLog('Consultando tracker.gg...', 'info');
+    }
+
     const scraped = await scrapeProfile(cfg.platform, cfg.username);
     const modes = scraped.modes;
     const careerStats = scraped.careerStats;
@@ -300,17 +390,51 @@ async function poll(cfg) {
       const seOk = await updateCommand(cfg.channelId, cfg.commandName, cfg.streamElementsToken, response);
       sendLog(seOk ? 'Comando actualizado en StreamElements.' : 'No se pudo actualizar StreamElements.', seOk ? 'success' : 'warn');
       if (seOk) lastPublishedResponse = response;
+
+      // A changed MMR/session result means the post-match burst succeeded.
+      if (meta.reason === 'match-end-fast') {
+        fastPollInProgress = false;
+        if (fastPollTimer) { clearTimeout(fastPollTimer); fastPollTimer = null; }
+        sendLog('⚡ MMR nuevo detectado. Actualización rápida completada.', 'success');
+      }
+    } else if (meta.reason === 'match-end-fast') {
+      const delays = Array.isArray(cfg.fastPollDelays) && cfg.fastPollDelays.length
+        ? cfg.fastPollDelays.map(Number).filter(n => Number.isFinite(n) && n >= 0)
+        : [2000, 4000, 7000, 12000, 20000];
+      const currentIndex = delays.findIndex(d => d >= 0 && d >= (meta.elapsedMs || 0));
+      const nextIndex = currentIndex >= 0 ? currentIndex + 1 : 1;
+      const nextDelay = delays[nextIndex];
+
+      if (nextDelay != null && meta.generation === fastPollGeneration) {
+        sendLog(`⏳ Tracker.gg aún no refleja el resultado. Reintentando en ${nextDelay / 1000}s...`, 'info');
+        // Preserve generation and track elapsed time from this burst.
+        const elapsed = Number(meta.elapsedMs) || 0;
+        scheduleFastPoll(nextDelay, meta.generation);
+        fastPollTimer._rlElapsedMs = elapsed + nextDelay;
+      } else {
+        fastPollInProgress = false;
+        sendLog('Fin de actualización rápida: Tracker.gg todavía no publicó un MMR nuevo.', 'warn');
+      }
     } else {
       sendLog('Sin cambios en MMR/estadísticas.', 'info');
     }
   } catch (err) {
     sendLog(err.message, 'error');
+    if (meta.reason === 'match-end-fast') {
+      fastPollInProgress = false;
+    }
   }
 
-  if (isTracking) {
-    // Hard cap: never poll slower than every 30 seconds. Default is 10s.
+  if (isTracking && meta.reason !== 'match-end-fast') {
     const interval = Math.min(Math.max(Number(loadConfig().pollInterval) || 10000, 5000), 30000);
     sendLog(`Próxima actualización en ${interval / 1000}s.`, 'info');
-    pollTimer = setTimeout(() => poll(loadConfig()), interval);
+    pollTimer = setTimeout(() => poll(loadConfig(), { reason: 'normal' }), interval);
   }
 }
+
+// Wire the listener once at module initialization.
+rlStatsApi.on('connected', () => sendLog('Rocket League Stats API conectada. Detección de fin de partida activa.', 'success'));
+rlStatsApi.on('error', err => {
+  if (err.code !== 'ECONNREFUSED') sendLog(`Stats API: ${err.message}`, 'warn');
+});
+rlStatsApi.on('*', onStatsApiEvent);
