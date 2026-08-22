@@ -9,16 +9,12 @@
     "dist": "electron-builder --win --x64",
     "dist:portable": "electron-builder --win portable --x64"
   },
-  "engines": {
-    "node": ">=18.0.0"
-  },
+  "engines": { "node": ">=18.0.0" },
   "build": {
     "appId": "com.siliusxix.rl-mmr-tracker",
     "productName": "RL MMR Tracker",
     "copyright": "siliusxix",
-    "directories": {
-      "output": "dist"
-    },
+    "directories": { "output": "dist" },
     "files": [
       "main.js",
       "preload.js",
@@ -26,23 +22,14 @@
       "streamElements.js",
       "sessionTracker.js",
       "scraper.js",
+      "rlStatsApi.js",
       "index.js",
       "node_modules/**"
     ],
     "win": {
       "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
-        }
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
       ]
     },
     "nsis": {
