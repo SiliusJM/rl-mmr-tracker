@@ -27,6 +27,8 @@ Aplicacion de escritorio para streamers de Rocket League que rastrea tu MMR comp
 - **Modos auto-detectados desde la API** -- si Psyonix agrega o elimina un modo, la app lo refleja automaticamente sin actualizaciones
 - Contador de ganados/perdidos del dia (se resetea a medianoche)
 - Soporte para temporadas anteriores (hasta 2 temporadas atrás)
+- **Deteccion inmediata del resultado de la partida** mediante la Stats API local de Rocket League
+- **Vigilancia rapida de Tracker.gg despues de cada partida** para actualizar el MMR tan pronto como Tracker.gg publique el cambio
 
 ### Vista de Perfil Completo (OBS)
 - **URL:** `http://localhost:3030/obs/profile`
@@ -80,10 +82,58 @@ Selecciona exactamente qué estadísticas incluir:
    - La primera vez detecta que `node_modules/` no existe y ejecuta `npm install` automaticamente (puede tardar 1-2 minutos dependiendo de tu internet).
    - Las siguientes veces abre la app directamente.
 3. Haz clic en **Configuracion**, completa los campos y guarda.
-4. Presiona **INICIAR**.
-5. Despues del primer ciclo abre **Configuracion**, selecciona los modos que quieres en tu chat y guarda.
+4. Configura la **Rocket League Stats API** siguiendo la seccion correspondiente de este README.
+5. Presiona **INICIAR**.
+6. Despues del primer ciclo abre **Configuracion**, selecciona los modos que quieres en tu chat y guarda.
 
 > Si prefieres la linea de comandos: `npm install` una sola vez, luego `npm start` cada vez.
+
+---
+
+## Configuracion de Rocket League Stats API
+
+La deteccion inmediata de victorias y derrotas utiliza la Stats API local de Rocket League. Esto permite que el resultado de la partida se publique en StreamElements sin esperar a que Tracker.gg actualice el MMR.
+
+### Archivo de configuracion
+
+En Windows, abre:
+
+```text
+C:\Users\SILIUS\Documents\My Games\Rocket League\TAGame\Config\TAStatsAPI.ini
+```
+
+> Si tu carpeta de usuario de Windows tiene otro nombre, sustituye `SILIUS` por tu nombre de usuario de Windows.
+
+El archivo debe contener al menos:
+
+```ini
+[TAGame.MatchStatsExporter_TA]
+Port=49123
+WebPort=49124
+PacketSendRate=10
+
+[IniVersion]
+0=1785885193.000000
+```
+
+**Importante:** `PacketSendRate=0` desactiva la Stats API. Para que el RL MMR Tracker pueda detectar el final de la partida, usa un valor positivo como `10`.
+
+### Después de modificar el archivo
+
+1. Cierra completamente Rocket League.
+2. Guarda `TAStatsAPI.ini`.
+3. Abre Rocket League nuevamente.
+4. Inicia RL MMR Tracker.
+5. Verifica en el log que aparezca:
+   ```text
+   Rocket League Stats API conectada. Detección de fin de partida activa.
+   ```
+
+No es necesario cambiar `Port=49123` ni `WebPort=49124` salvo que tengas una configuración diferente de forma intencionada.
+
+### ¿Qué hace la Stats API?
+
+Cuando termina una partida, Rocket League informa el resultado al tracker mediante la conexión local. El programa puede entonces actualizar inmediatamente el contador `📊 Hoy: X Ganados - Y Perdidos`. Tracker.gg sigue consultándose por separado para obtener el nuevo MMR.
 
 ---
 
@@ -115,9 +165,50 @@ StreamElements funciona tanto si vinculaste Twitch como YouTube. Cada plataforma
 
 ---
 
-## Uso de recursos y rendimiento
+## Intervalos de actualizacion y rendimiento
 
-El tracker esta disenado para correr en segundo plano sin afectar tu juego ni tu internet.
+El intervalo normal por defecto es de **10 segundos**. Se mantiene un minimo de 5 segundos y un maximo de 30 segundos para evitar una frecuencia excesiva de consultas normales a Tracker.gg.
+
+Durante una partida, el tracker no necesita consultar continuamente Tracker.gg para conocer el resultado: la Stats API local informa el final de la partida. Al terminar, se activa una vigilancia especifica de Tracker.gg para detectar el nuevo MMR.
+
+### Vigilancia post-partida
+
+Las consultas rapidas se realizan con este esquema:
+
+```text
+2 / 2 / 4 / 4 / 7 / 7 / 12 / 12 / 20 / 20 / 30 / 30 / 45 / 45 / 60 / 90 / 120 / 180 / 240 / 300s
+```
+
+El proceso se detiene inmediatamente cuando Tracker.gg publica el nuevo MMR. Si no hay cambio, continua hasta un maximo de 5 minutos.
+
+Durante esta vigilancia se pausa temporalmente el polling normal para evitar consultas duplicadas.
+
+### Mensajes al terminar una partida
+
+La consola mantiene solo estos mensajes propios del resultado inmediato:
+
+```text
+🏁 Fin de partida detectado.
+❌ Derrota detectada desde Rocket League.
+📡 Publicando resultado en StreamElements...
+✅ Resultado Ganado/Perdido actualizado en StreamElements.
+```
+
+Para una victoria, el segundo mensaje sera:
+
+```text
+🏆 Victoria detectada desde Rocket League.
+```
+
+Los mensajes de las consultas de Tracker.gg y del resto del tracker permanecen sin cambios.
+
+### ¿Cuanto tarda en actualizarse el MMR?
+
+El resultado Ganado/Perdido puede actualizarse inmediatamente gracias a Rocket League Stats API. El MMR depende de cuando Tracker.gg publique el cambio. La app lo consulta con la vigilancia post-partida anterior y lo actualiza en cuanto aparece.
+
+### Consumo de recursos
+
+El tracker esta diseñado para correr en segundo plano sin afectar tu juego ni tu internet.
 
 | Recurso | Consumo aproximado |
 |---|---|
@@ -128,7 +219,7 @@ El tracker esta disenado para correr en segundo plano sin afectar tu juego ni tu
 
 **Impacto real en streaming/gaming: ninguno.**
 - El navegador corre headless (sin ventana visible) y solo se activa durante el scraping.
-- El intervalo minimo es de 30 segundos; con 60 segundos (por defecto) el consumo es casi imperceptible.
+- Las consultas rapidas post-partida son temporales y se detienen cuando Tracker.gg publica el MMR o al llegar a 5 minutos.
 - No interfiere con OBS, Rocket League ni con el ancho de banda de tu partida.
 
 ---
@@ -220,21 +311,6 @@ Esto es una limitación de las APIs públicas disponibles, no del tracker.
 
 ---
 
-## Nota sobre el intervalo de actualizacion
-
-El "Update in 3:18" que ves en tracker.gg es el cache del **sitio web**, no el de esta app. La app consulta la API en el intervalo que configures (60 segundos por defecto, minimo 30 s).
-
-### Cuanto tarda en actualizarse el contador de Ganados/Perdidos?
-
-El contador de **📊 Partidos de hoy** en la UI y en el comando de chat se actualiza en cada ciclo de polling:
-
-- Con el intervalo por defecto de **60 segundos**, el contador puede tardar hasta **60 s** en reflejar el resultado de una partida.
-- El minimo configurable es **30 segundos**.
-- El contador detecta cambios comparando el MMR de cada modo entre ciclos: si sube es victoria, si baja es derrota.
-- Se resetea automaticamente a medianoche (cambio de dia).
-
----
-
 ## Estructura del proyecto
 
 ```
@@ -244,6 +320,7 @@ rl-mmr-tracker/
 ├── scraper.js                 # Scraper de tracker.gg (puppeteer-extra + stealth)
 ├── streamElements.js          # Cliente API de StreamElements
 ├── sessionTracker.js          # Contador de ganados/perdidos
+├── rlStatsApi.js              # Listener local de Rocket League Stats API
 ├── obs-server.js              # Servidor HTTP para overlays de OBS
 ├── renderer/
 │   ├── index.html             # UI principal
