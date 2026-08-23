@@ -1,38 +1,78 @@
 'use strict';
 
 /**
- * sessionTracker.js — Session win/loss tracker (MMR-delta based)
+ * sessionTracker.js — Session win/loss tracker.
  *
- * Logic:
- *   - First poll: record baseline MMR, don't count anything.
- *   - Subsequent polls: compare each playlist's MMR to previous value.
- *     - Increased → win
- *     - Decreased → loss
- *   - Resets automatically on script restart (in-memory only).
+ * Normal mode counts results from MMR deltas. When Rocket League's Stats API
+ * gives us the result first, recordMatchResult() updates the session instantly
+ * and the following MMR delta is consumed so it is not counted twice.
  */
 
-let wins    = 0;
-let losses  = 0;
-let prevMMR = null; // { [playlistId]: mmr } — dynamic, adapts to any modes
+let wins = 0;
+let losses = 0;
+let prevMMR = null;
 let currentDay = new Date().toDateString();
+let pendingExternalResults = [];
+
+function resetIfNewDay(events) {
+  const today = new Date().toDateString();
+  if (today !== currentDay) {
+    wins = 0;
+    losses = 0;
+    prevMMR = null;
+    pendingExternalResults = [];
+    currentDay = today;
+    events.push({ msg: 'Nuevo día detectado — contadores de sesión reseteados.', type: 'info' });
+  }
+}
 
 /**
- * Compares current mode array against previous snapshot.
- * Each element: { id: number, mmr: number, ... }
- *
- * @param {Array<{id:number, mmr:number}>} modesArray
- * @returns {{ wins: number, losses: number, changed: boolean }}
+ * Record the match result from Rocket League immediately.
+ * The result is kept as pending so a later Tracker.gg MMR delta won't double-count it.
  */
+function recordMatchResult(result) {
+  const events = [];
+  resetIfNewDay(events);
+  if (result !== 'win' && result !== 'loss') return { wins, losses, changed: false, events };
+
+  if (result === 'win') {
+    wins++;
+    events.push({ msg: '🏆 Victoria detectada desde Rocket League. Resultado actualizado inmediatamente.', type: 'success' });
+  } else {
+    losses++;
+    events.push({ msg: '❌ Derrota detectada desde Rocket League. Resultado actualizado inmediatamente.', type: 'warn' });
+  }
+
+  pendingExternalResults.push({ result, expiresAt: Date.now() + 5 * 60 * 1000 });
+  return { wins, losses, changed: true, events };
+}
+
+function consumeExternalResultForDelta(delta) {
+  const now = Date.now();
+  pendingExternalResults = pendingExternalResults.filter(p => p.expiresAt > now);
+  if (!pendingExternalResults.length) return false;
+
+  const result = delta > 0 ? 'win' : delta < 0 ? 'loss' : null;
+  if (!result) return false;
+
+  const index = pendingExternalResults.findIndex(p => p.result === result);
+  if (index === -1) return false;
+  pendingExternalResults.splice(index, 1);
+  return true;
+}
+
 function updateSession(modesArray) {
   const today = new Date().toDateString();
   const events = [];
   if (today !== currentDay) {
-    wins = 0; losses = 0; prevMMR = null;
+    wins = 0;
+    losses = 0;
+    prevMMR = null;
+    pendingExternalResults = [];
     currentDay = today;
     events.push({ msg: 'Nuevo día detectado — contadores de sesión reseteados.', type: 'info' });
   }
 
-  // Build current MMR map: String(playlistId) → mmr
   const currentMMR = {};
   for (const mode of (modesArray || [])) {
     if (mode.id != null && mode.mmr != null) currentMMR[String(mode.id)] = mode.mmr;
@@ -47,12 +87,17 @@ function updateSession(modesArray) {
   for (const [id, curr] of Object.entries(currentMMR)) {
     const prev = prevMMR[id];
     if (prev == null || curr === prev) continue;
-    if (curr > prev) {
+
+    const delta = curr - prev;
+    if (consumeExternalResultForDelta(delta)) {
+      // Rocket League already counted this result immediately.
+      events.push({ msg: `📈 MMR confirmado por Tracker.gg (${delta > 0 ? '+' : ''}${delta}).`, type: 'info' });
+    } else if (delta > 0) {
       wins++;
-      events.push({ msg: `¡Victoria detectada! (+${curr - prev} MMR)`, type: 'success' });
+      events.push({ msg: `¡Victoria detectada! (+${delta} MMR)`, type: 'success' });
     } else {
       losses++;
-      events.push({ msg: `Derrota detectada (${curr - prev} MMR)`, type: 'warn' });
+      events.push({ msg: `Derrota detectada (${delta} MMR)`, type: 'warn' });
     }
     changed = true;
   }
@@ -61,22 +106,13 @@ function updateSession(modesArray) {
   return { wins, losses, changed, events };
 }
 
-/**
- * Returns current counters without modifying state.
- * @returns {{ wins: number, losses: number }}
- */
-function getSession() {
-  return { wins, losses };
-}
+function getSession() { return { wins, losses }; }
 
-/**
- * Resets all counters and baseline (useful for testing).
- */
 function resetSession() {
-  wins    = 0;
-  losses  = 0;
+  wins = 0;
+  losses = 0;
   prevMMR = null;
+  pendingExternalResults = [];
 }
 
-module.exports = { updateSession, getSession, resetSession };
-
+module.exports = { updateSession, recordMatchResult, getSession, resetSession };
