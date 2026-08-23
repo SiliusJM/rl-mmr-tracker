@@ -61,7 +61,9 @@ const DEFAULT_CFG = {
   pollInterval: 10000, selectedModeIds: [10, 11, 13, 28], showRecord: true,
   obsPort: 3030, obsEnabled: true, showPrevSeason1: true, showPrevSeason2: false,
   twitchCommandFormat: 'modes', twitchShowStats: false, twitchStatsToShow: [],
-  fastPollEnabled: true, fastPollDelays: [2000, 4000, 7000, 12000, 20000],
+  fastPollEnabled: true,
+  // Post-match watch: seconds after match end. It keeps watching until 5 minutes.
+  fastPollDelays: [2000, 4000, 7000, 12000, 20000, 30000, 45000, 60000, 90000, 120000, 180000, 240000, 300000],
   rlStatsApiHost: '127.0.0.1', rlStatsApiPort: 49123,
 };
 
@@ -75,7 +77,31 @@ function loadConfig() {
 }
 function saveConfig(cfg) { fs.writeFileSync(configPath(), JSON.stringify(cfg, null, 2), 'utf8'); }
 
+function normalizeFastPollDelays(cfg) {
+  const defaults = DEFAULT_CFG.fastPollDelays;
+  const raw = Array.isArray(cfg.fastPollDelays) ? cfg.fastPollDelays : defaults;
+  const delays = raw.map(Number).filter(n => Number.isFinite(n) && n >= 0);
+  if (!delays.length) return defaults;
+  // Convert legacy configurations containing the old 2/4/7/12/20s schedule
+  // to the extended post-match watch automatically.
+  if (delays.length <= 5 && delays.join(',') === '2000,4000,7000,12000,20000') return defaults;
+  return delays;
+}
+
+function mergeConfig(cfg) {
+  return { ...DEFAULT_CFG, ...cfg, fastPollDelays: normalizeFastPollDelays(cfg) };
+}
+
+function getFastPollDelays() {
+  return normalizeFastPollDelays(loadConfig());
+}
+
+function saveConfig(cfg) {
+  fs.writeFileSync(configPath(), JSON.stringify(mergeConfig(cfg), null, 2), 'utf8');
+}
+
 async function applyLiveConfig(cfg) {
+  cfg = mergeConfig(cfg);
   if (!lastData) return { applied: false };
   const selectedIds = cfg.selectedModeIds || [10, 11, 13, 28];
   const showRecord = cfg.showRecord !== false;
@@ -107,7 +133,7 @@ let fastPollInProgress = false;
 (function initLastDataFromCache() {
   const cached = loadModesCache();
   if (cached && cached.length > 0) {
-    const cfg = loadConfig();
+    const cfg = mergeConfig(loadConfig());
     lastData = { modes: cached, prevSeason1: null, prevSeason2: null, session: { wins: 0, losses: 0 },
       selectedModeIds: cfg.selectedModeIds || [10, 11, 13, 28], showRecord: cfg.showRecord !== false,
       showPrevSeason1: cfg.showPrevSeason1 !== false, showPrevSeason2: cfg.showPrevSeason2 === true };
@@ -140,7 +166,7 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  const cfg = loadConfig();
+  const cfg = mergeConfig(loadConfig());
   if (cfg.obsEnabled !== false) {
     await obsServer.start(cfg.obsPort || 3030).catch(err => console.warn('[WARN] No se pudo iniciar el servidor OBS:', err.message));
     if (lastData) obsServer.setData(lastData);
@@ -162,12 +188,6 @@ function cancelFastPoll() {
   fastPollInProgress = false;
 }
 
-function getFastPollDelays() {
-  const cfg = loadConfig();
-  const delays = Array.isArray(cfg.fastPollDelays) ? cfg.fastPollDelays.map(Number).filter(n => Number.isFinite(n) && n >= 0) : [];
-  return delays.length ? delays : [2000, 4000, 7000, 12000, 20000];
-}
-
 function scheduleFastPoll(delayMs, generation, attempt) {
   if (!isTracking || generation !== fastPollGeneration) return;
   if (fastPollTimer) clearTimeout(fastPollTimer);
@@ -180,7 +200,7 @@ function scheduleFastPoll(delayMs, generation, attempt) {
 
 function startFastPoll() {
   if (!isTracking) return;
-  const cfg = loadConfig();
+  const cfg = mergeConfig(loadConfig());
   if (cfg.fastPollEnabled === false) return;
 
   const now = Date.now();
@@ -193,7 +213,7 @@ function startFastPoll() {
   fastPollAttempt = 0;
   const delays = getFastPollDelays();
 
-  sendLog(`🏁 Fin de partida detectado. Actualización rápida: ${delays.map(d => d / 1000).join(' / ')}s.`, 'success');
+  sendLog(`🏁 Fin de partida detectado. Vigilancia post-partida: ${delays.map(d => d / 1000).join(' / ')}s (máx. 5 min).`, 'success');
   scheduleFastPoll(delays[0], generation, 0);
 }
 
@@ -206,9 +226,10 @@ function onStatsApiEvent({ event }) {
   if (isMatchEnd) startFastPoll();
 }
 
-ipcMain.handle('load-config', () => loadConfig());
+ipcMain.handle('load-config', () => mergeConfig(loadConfig()));
 ipcMain.handle('save-config', async (_e, cfg) => {
-  const oldCfg = loadConfig();
+  const oldCfg = mergeConfig(loadConfig());
+  cfg = mergeConfig(cfg);
   saveConfig(cfg);
   const newPort = cfg.obsPort || 3030;
   const oldPort = oldCfg.obsPort || 3030;
@@ -230,7 +251,7 @@ ipcMain.handle('test-connection', async (_e, { channelId, streamElementsToken, c
 ipcMain.handle('start-tracker', async () => {
   if (isTracking) return true;
   isTracking = true;
-  const cfg = loadConfig();
+  const cfg = mergeConfig(loadConfig());
   if (!cfg.username || !cfg.streamElementsToken || !cfg.channelId) {
     isTracking = false;
     sendLog('Completa la configuración antes de iniciar.', 'error');
@@ -282,8 +303,12 @@ ipcMain.handle('stop-tracker', () => {
 
 async function poll(cfg, meta = {}) {
   if (!isTracking) return null;
+  const isFast = meta.reason === 'match-end-fast';
+  // Never run the normal scheduler while a post-match watch is active.
+  if (!isFast && fastPollInProgress) return null;
+
   try {
-    sendLog(meta.reason === 'match-end-fast' ? '⚡ Consulta rápida de Tracker.gg...' : 'Consultando tracker.gg...', 'info');
+    sendLog(isFast ? '⚡ Consulta rápida de Tracker.gg...' : 'Consultando tracker.gg...', 'info');
     const scraped = await scrapeProfile(cfg.platform, cfg.username);
     const modes = scraped.modes;
     const careerStats = scraped.careerStats;
@@ -308,12 +333,13 @@ async function poll(cfg, meta = {}) {
       const seOk = await updateCommand(cfg.channelId, cfg.commandName, cfg.streamElementsToken, response);
       sendLog(seOk ? 'Comando actualizado en StreamElements.' : 'No se pudo actualizar StreamElements.', seOk ? 'success' : 'warn');
       if (seOk) lastPublishedResponse = response;
-      if (meta.reason === 'match-end-fast') {
+
+      if (isFast) {
         fastPollInProgress = false;
         if (fastPollTimer) { clearTimeout(fastPollTimer); fastPollTimer = null; }
-        sendLog('⚡ MMR nuevo detectado. Actualización rápida completada.', 'success');
+        sendLog('⚡ MMR nuevo detectado. Vigilancia post-partida completada.', 'success');
       }
-    } else if (meta.reason === 'match-end-fast') {
+    } else if (isFast) {
       const delays = getFastPollDelays();
       const nextAttempt = Number(meta.attempt || 0) + 1;
       if (delays[nextAttempt] != null && meta.generation === fastPollGeneration) {
@@ -322,18 +348,28 @@ async function poll(cfg, meta = {}) {
         scheduleFastPoll(delays[nextAttempt], meta.generation, nextAttempt);
       } else {
         fastPollInProgress = false;
-        sendLog('Fin de actualización rápida: Tracker.gg todavía no publicó un MMR nuevo.', 'warn');
+        sendLog('Fin de vigilancia post-partida: Tracker.gg todavía no publicó un MMR nuevo después de 5 minutos.', 'warn');
       }
     } else {
       sendLog('Sin cambios en MMR/estadísticas.', 'info');
     }
   } catch (err) {
     sendLog(err.message, 'error');
-    if (meta.reason === 'match-end-fast') fastPollInProgress = false;
+    if (isFast) {
+      const delays = getFastPollDelays();
+      const nextAttempt = Number(meta.attempt || 0) + 1;
+      if (delays[nextAttempt] != null && meta.generation === fastPollGeneration) {
+        fastPollAttempt = nextAttempt;
+        sendLog(`⚠️ Error durante vigilancia post-partida. Reintentando en ${delays[nextAttempt] / 1000}s...`, 'warn');
+        scheduleFastPoll(delays[nextAttempt], meta.generation, nextAttempt);
+      } else {
+        fastPollInProgress = false;
+      }
+    }
   }
 
-  if (isTracking && meta.reason !== 'match-end-fast') {
-    const interval = Math.min(Math.max(Number(loadConfig().pollInterval) || 10000, 5000), 30000);
+  if (isTracking && !isFast && !fastPollInProgress) {
+    const interval = Math.min(Math.max(Number(mergeConfig(loadConfig()).pollInterval) || 10000, 5000), 30000);
     sendLog(`Próxima actualización en ${interval / 1000}s.`, 'info');
     pollTimer = setTimeout(() => poll(loadConfig(), { reason: 'normal' }), interval);
   }
