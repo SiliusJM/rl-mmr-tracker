@@ -40,29 +40,28 @@ function buildResponse(modes, selectedIds, showRecord, session, careerStats, cfg
   const showStats = cfg.twitchShowStats || false;
   const statsToShow = cfg.twitchStatsToShow || [];
   const parts = ['🚀'];
-
   if (format === 'modes' || format === 'both') parts.push(...selected.map(m => `${m.name}: ${m.rank} (${m.mmr})`));
-
   if ((format === 'stats' || format === 'both') && careerStats && showStats && statsToShow.length > 0) {
     const statsMap = {
-      goals: `⚽ ${careerStats.goals} Goles`, shots: `🎯 ${careerStats.shots} Tiros`,
-      saves: `🛡️ ${careerStats.saves} Salvadas`, assists: `🤝 ${careerStats.assists} Asistencias`,
-      mvps: `⭐ ${careerStats.mvps} MVPs`, wins: `🏆 ${careerStats.wins} Ganados`,
+      goals: `⚽ ${careerStats.goals} Goles`, shots: `🎯 ${careerStats.shots} Tiros`, saves: `🛡️ ${careerStats.saves} Salvadas`,
+      assists: `🤝 ${careerStats.assists} Asistencias`, mvps: `⭐ ${careerStats.mvps} MVPs`, wins: `🏆 ${careerStats.wins} Ganados`,
     };
     parts.push(...statsToShow.filter(k => statsMap[k]).map(k => statsMap[k]));
   }
-
   if (showRecord) parts.push(`📊 Hoy: ${session.wins} Ganados - ${session.losses} Perdidos`);
   return parts.join(' | ');
 }
 
 const DEFAULT_CFG = {
   platform: 'epic', username: '', streamElementsToken: '', channelId: '', commandName: 'rango',
+  // 10s is the default; the UI/config can still choose a slower interval if desired.
   pollInterval: 10000, selectedModeIds: [10, 11, 13, 28], showRecord: true,
   obsPort: 3030, obsEnabled: true, showPrevSeason1: true, showPrevSeason2: false,
   twitchCommandFormat: 'modes', twitchShowStats: false, twitchStatsToShow: [],
   fastPollEnabled: true,
-  fastPollDelays: [2000, 4000, 7000, 12000, 20000, 30000, 45000, 60000, 90000, 120000, 180000, 240000, 300000],
+  // Post-match retry schedule: repeated checks at 2/2, 4/4, 7/7, 12/12, 20/20, 30/30, 45/45,
+  // then progressively slower checks up to 5 minutes after the match.
+  fastPollDelays: [2000, 2000, 4000, 4000, 7000, 7000, 12000, 12000, 20000, 20000, 30000, 30000, 45000, 45000, 60000, 90000, 120000, 180000, 240000, 300000],
   rlStatsApiHost: '127.0.0.1', rlStatsApiPort: 49123,
 };
 
@@ -83,7 +82,6 @@ function normalizeFastPollDelays(cfg) {
   if (delays.length <= 5 && delays.join(',') === '2000,4000,7000,12000,20000') return defaults;
   return delays;
 }
-
 function mergeConfig(cfg) { return { ...DEFAULT_CFG, ...cfg, fastPollDelays: normalizeFastPollDelays(cfg) }; }
 function getFastPollDelays() { return normalizeFastPollDelays(loadConfig()); }
 function saveConfig(cfg) { fs.writeFileSync(configPath(), JSON.stringify(mergeConfig(cfg), null, 2), 'utf8'); }
@@ -93,11 +91,9 @@ async function applyLiveConfig(cfg) {
   if (!lastData) return { applied: false };
   const selectedIds = cfg.selectedModeIds || [10, 11, 13, 28];
   const showRecord = cfg.showRecord !== false;
-  lastData = { ...lastData, selectedModeIds: selectedIds, showRecord,
-    showPrevSeason1: cfg.showPrevSeason1 !== false, showPrevSeason2: cfg.showPrevSeason2 === true };
+  lastData = { ...lastData, selectedModeIds: selectedIds, showRecord, showPrevSeason1: cfg.showPrevSeason1 !== false, showPrevSeason2: cfg.showPrevSeason2 === true };
   if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('data-update', lastData);
   obsServer.setData(lastData);
-
   if (isTracking && cfg.channelId && cfg.streamElementsToken && lastData.modes) {
     const response = buildResponse(lastData.modes, selectedIds, showRecord, lastData.session || { wins: 0, losses: 0 }, lastData.careerStats, cfg);
     const ok = await updateCommand(cfg.channelId, cfg.commandName, cfg.streamElementsToken, response);
@@ -124,18 +120,12 @@ let lastHandledMatchGuid = null;
   const cached = loadModesCache();
   if (cached && cached.length > 0) {
     const cachedCfg = mergeConfig(loadConfig());
-    lastData = { modes: cached, prevSeason1: null, prevSeason2: null, session: { wins: 0, losses: 0 },
-      selectedModeIds: cachedCfg.selectedModeIds || [10, 11, 13, 28], showRecord: cachedCfg.showRecord !== false,
-      showPrevSeason1: cachedCfg.showPrevSeason1 !== false, showPrevSeason2: cachedCfg.showPrevSeason2 === true };
+    lastData = { modes: cached, prevSeason1: null, prevSeason2: null, session: { wins: 0, losses: 0 }, selectedModeIds: cachedCfg.selectedModeIds || [10, 11, 13, 28], showRecord: cachedCfg.showRecord !== false, showPrevSeason1: cachedCfg.showPrevSeason1 !== false, showPrevSeason2: cachedCfg.showPrevSeason2 === true };
   }
 }());
 
 function createWindow() {
-  mainWin = new BrowserWindow({
-    width: 920, height: 680, minWidth: 700, minHeight: 540,
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), nodeIntegration: false, contextIsolation: true },
-    title: '🚀 RL MMR Tracker', backgroundColor: '#0d0d1a', show: false,
-  });
+  mainWin = new BrowserWindow({ width: 920, height: 680, minWidth: 700, minHeight: 540, webPreferences: { preload: path.join(__dirname, 'preload.js'), nodeIntegration: false, contextIsolation: true }, title: '🚀 RL MMR Tracker', backgroundColor: '#0d0d1a', show: false });
   mainWin.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   mainWin.setMenuBarVisibility(false);
   mainWin.once('ready-to-show', () => mainWin.show());
@@ -145,14 +135,7 @@ function createWindow() {
       if (isTracking && lastData) mainWin.webContents.send('data-update', lastData);
     }
   });
-  mainWin.on('closed', () => {
-    isTracking = false;
-    cancelFastPoll();
-    if (pollTimer) clearTimeout(pollTimer);
-    rlStatsApi.stop();
-    closeBrowser().catch(() => {});
-    mainWin = null;
-  });
+  mainWin.on('closed', () => { isTracking = false; cancelFastPoll(); if (pollTimer) clearTimeout(pollTimer); rlStatsApi.stop(); closeBrowser().catch(() => {}); mainWin = null; });
 }
 
 app.whenReady().then(async () => {
@@ -177,17 +160,11 @@ function cancelFastPoll() {
   if (fastPollTimer) { clearTimeout(fastPollTimer); fastPollTimer = null; }
   fastPollInProgress = false;
 }
-
 function scheduleFastPoll(delayMs, generation, attempt) {
   if (!isTracking || generation !== fastPollGeneration) return;
   if (fastPollTimer) clearTimeout(fastPollTimer);
-  fastPollTimer = setTimeout(async () => {
-    fastPollTimer = null;
-    if (!isTracking || generation !== fastPollGeneration) return;
-    await poll(loadConfig(), { reason: 'match-end-fast', generation, attempt });
-  }, delayMs);
+  fastPollTimer = setTimeout(async () => { fastPollTimer = null; if (!isTracking || generation !== fastPollGeneration) return; await poll(loadConfig(), { reason: 'match-end-fast', generation, attempt }); }, delayMs);
 }
-
 function startFastPoll() {
   if (!isTracking) return;
   const cfg = mergeConfig(loadConfig());
@@ -200,12 +177,11 @@ function startFastPoll() {
   const generation = fastPollGeneration;
   fastPollAttempt = 0;
   const delays = getFastPollDelays();
-  sendLog(`🏁 Fin de partida detectado. Vigilancia post-partida: ${delays.map(d => d / 1000).join(' / ')}s (máx. 5 min).`, 'success');
+  sendLog('🏁 Fin de partida detectado.', 'success');
   scheduleFastPoll(delays[0], generation, 0);
 }
 
 function normalizeName(value) { return String(value || '').trim().toLowerCase(); }
-
 function handleStatsUpdate(data) {
   const cfg = mergeConfig(loadConfig());
   const username = normalizeName(cfg.username);
@@ -219,45 +195,31 @@ async function publishImmediateMatchResult(result) {
   if (!isTracking || !result) return;
   const cfg = mergeConfig(loadConfig());
   const sessionData = recordMatchResult(result);
-  if (sessionData.events?.length) for (const ev of sessionData.events) sendLog(ev.msg, ev.type);
   if (!lastData || !Array.isArray(lastData.modes)) {
     sendLog('Resultado detectado, pero todavía no hay datos de Tracker.gg para publicar el comando.', 'warn');
     return;
   }
-
   lastData = { ...lastData, session: sessionData };
   if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('data-update', lastData);
   obsServer.setData(lastData);
-
   const response = buildResponse(lastData.modes, cfg.selectedModeIds || [10, 11, 13, 28], cfg.showRecord !== false, sessionData, lastData.careerStats, cfg);
   if (response === lastPublishedResponse) return;
-
-  sendLog(`📡 Publicando resultado inmediato en StreamElements...`, 'info');
+  sendLog('📡 Publicando resultado en StreamElements...', 'info');
   const ok = await updateCommand(cfg.channelId, cfg.commandName, cfg.streamElementsToken, response);
-  sendLog(ok ? '✅ Resultado Ganado/Perdido actualizado inmediatamente en StreamElements.' : '⚠️ Resultado detectado, pero no se pudo actualizar StreamElements.', ok ? 'success' : 'warn');
+  sendLog(ok ? '✅ Resultado Ganado/Perdido actualizado en StreamElements.' : '⚠️ Resultado detectado, pero no se pudo actualizar StreamElements.', ok ? 'success' : 'warn');
   if (ok) lastPublishedResponse = response;
 }
 
 function onStatsApiEvent({ event, data }) {
   const normalized = String(event || '').toLowerCase();
-  if (normalized === 'updatestate') {
-    handleStatsUpdate(data);
-    return;
-  }
+  if (normalized === 'updatestate') { handleStatsUpdate(data); return; }
   if (normalized !== 'matchended') return;
-
   const matchGuid = data?.MatchGuid || null;
   if (matchGuid && matchGuid === lastHandledMatchGuid) return;
   if (matchGuid) lastHandledMatchGuid = matchGuid;
-
   startFastPoll();
-
   const winnerTeamNum = Number(data?.WinnerTeamNum);
-  if (!Number.isInteger(winnerTeamNum) || !Number.isInteger(rlLocalTeamNum)) {
-    sendLog('⚠️ Fin de partida detectado, pero no pude determinar el equipo local para publicar Ganado/Perdido inmediatamente.', 'warn');
-    return;
-  }
-
+  if (!Number.isInteger(winnerTeamNum) || !Number.isInteger(rlLocalTeamNum)) return;
   const result = winnerTeamNum === rlLocalTeamNum ? 'win' : 'loss';
   publishImmediateMatchResult(result).catch(err => sendLog(`Error publicando resultado inmediato: ${err.message}`, 'error'));
 }
@@ -270,112 +232,58 @@ ipcMain.handle('save-config', async (_e, cfg) => {
   const newPort = cfg.obsPort || 3030;
   const oldPort = oldCfg.obsPort || 3030;
   if (cfg.obsEnabled !== false) {
-    if (newPort !== oldPort || !obsServer.isRunning()) {
-      await obsServer.stop();
-      await obsServer.start(newPort).catch(err => console.warn('[WARN] No se pudo reiniciar el servidor OBS:', err.message));
-      if (lastData) obsServer.setData(lastData);
-    }
+    if (newPort !== oldPort || !obsServer.isRunning()) { await obsServer.stop(); await obsServer.start(newPort).catch(err => console.warn('[WARN] No se pudo reiniciar el servidor OBS:', err.message)); if (lastData) obsServer.setData(lastData); }
   } else if (obsServer.isRunning()) await obsServer.stop();
   await applyLiveConfig(cfg);
   return true;
 });
-
-ipcMain.handle('test-connection', async (_e, { channelId, streamElementsToken, commandName }) =>
-  testStreamElementsConnection(channelId, commandName, streamElementsToken)
-);
-
+ipcMain.handle('test-connection', async (_e, { channelId, streamElementsToken, commandName }) => testStreamElementsConnection(channelId, commandName, streamElementsToken));
 ipcMain.handle('start-tracker', async () => {
   if (isTracking) return true;
   isTracking = true;
   const cfg = mergeConfig(loadConfig());
-  if (!cfg.username || !cfg.streamElementsToken || !cfg.channelId) {
-    isTracking = false;
-    sendLog('Completa la configuración antes de iniciar.', 'error');
-    if (mainWin) mainWin.webContents.send('tracker-state', { running: false });
-    return false;
-  }
+  if (!cfg.username || !cfg.streamElementsToken || !cfg.channelId) { isTracking = false; sendLog('Completa la configuración antes de iniciar.', 'error'); if (mainWin) mainWin.webContents.send('tracker-state', { running: false }); return false; }
   sendLog('Probando conexión con StreamElements...', 'info');
   const ok = await testStreamElementsConnection(cfg.channelId, cfg.commandName, cfg.streamElementsToken);
-  if (!ok) {
-    isTracking = false;
-    sendLog('No se pudo conectar con StreamElements. Verifica el token y el Channel ID.', 'error');
-    if (mainWin) mainWin.webContents.send('tracker-state', { running: false });
-    return false;
-  }
+  if (!ok) { isTracking = false; sendLog('No se pudo conectar con StreamElements. Verifica el token y el Channel ID.', 'error'); if (mainWin) mainWin.webContents.send('tracker-state', { running: false }); return false; }
   sendLog('Conexión con StreamElements verificada.', 'success');
   if (mainWin) mainWin.webContents.send('tracker-state', { running: true });
-  resetPrevSeasonCache();
-  lastPublishedResponse = null;
-  lastHandledMatchGuid = null;
-  rlLocalTeamNum = null;
-  cancelFastPoll();
-  if (cfg.fastPollEnabled !== false) {
-    rlStatsApi.start({ host: cfg.rlStatsApiHost || '127.0.0.1', port: cfg.rlStatsApiPort || 49123 });
-    sendLog('Detector de fin de partida iniciado.', 'info');
-  }
+  resetPrevSeasonCache(); lastPublishedResponse = null; lastHandledMatchGuid = null; rlLocalTeamNum = null; cancelFastPoll();
+  if (cfg.fastPollEnabled !== false) { rlStatsApi.start({ host: cfg.rlStatsApiHost || '127.0.0.1', port: cfg.rlStatsApiPort || 49123 }); sendLog('Detector de fin de partida iniciado.', 'info'); }
   poll(cfg);
   return true;
 });
-
 ipcMain.handle('get-status', () => ({ running: isTracking, data: lastData, fastPoll: fastPollInProgress, statsApiConnected: rlStatsApi.isConnected() }));
 ipcMain.handle('get-modes-cache', () => loadModesCache());
 ipcMain.handle('get-obs-info', () => ({ port: obsServer.getPort() || (loadConfig().obsPort || 3030), running: obsServer.isRunning() }));
-
-ipcMain.handle('force-poll', () => {
-  if (!isTracking) return false;
-  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
-  setImmediate(() => poll(loadConfig(), { reason: 'manual' }));
-  return true;
-});
-
-ipcMain.handle('stop-tracker', () => {
-  isTracking = false;
-  cancelFastPoll();
-  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
-  rlStatsApi.stop();
-  closeBrowser().catch(() => {});
-  sendLog('Tracker detenido.', 'info');
-  if (mainWin) mainWin.webContents.send('tracker-state', { running: false });
-  return true;
-});
+ipcMain.handle('force-poll', () => { if (!isTracking) return false; if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } setImmediate(() => poll(loadConfig(), { reason: 'manual' })); return true; });
+ipcMain.handle('stop-tracker', () => { isTracking = false; cancelFastPoll(); if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } rlStatsApi.stop(); closeBrowser().catch(() => {}); sendLog('Tracker detenido.', 'info'); if (mainWin) mainWin.webContents.send('tracker-state', { running: false }); return true; });
 
 async function poll(cfg, meta = {}) {
   if (!isTracking) return null;
   const isFast = meta.reason === 'match-end-fast';
   if (!isFast && fastPollInProgress) return null;
-
   try {
     sendLog(isFast ? '⚡ Consulta rápida de Tracker.gg...' : 'Consultando tracker.gg...', 'info');
     const scraped = await scrapeProfile(cfg.platform, cfg.username);
     const modes = scraped.modes;
     const careerStats = scraped.careerStats;
     const sessionData = updateSession(modes);
-
     if (sessionData.events?.length) for (const ev of sessionData.events) sendLog(ev.msg, ev.type);
-
     const selectedIds = cfg.selectedModeIds || [10, 11, 13, 28];
     const showRecord = cfg.showRecord !== false;
     const response = buildResponse(modes, selectedIds, showRecord, sessionData, careerStats, cfg);
-
     saveModesCache(modes);
-    lastData = { modes, careerStats, prevSeason1: scraped.prevSeason1, prevSeason2: scraped.prevSeason2,
-      session: sessionData, selectedModeIds: selectedIds, showRecord,
-      showPrevSeason1: cfg.showPrevSeason1 !== false, showPrevSeason2: cfg.showPrevSeason2 === true };
+    lastData = { modes, careerStats, prevSeason1: scraped.prevSeason1, prevSeason2: scraped.prevSeason2, session: sessionData, selectedModeIds: selectedIds, showRecord, showPrevSeason1: cfg.showPrevSeason1 !== false, showPrevSeason2: cfg.showPrevSeason2 === true };
     if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('data-update', lastData);
     obsServer.setData(lastData);
-
     const changed = response !== lastPublishedResponse;
     if (changed) {
       sendLog(response, 'update');
       const seOk = await updateCommand(cfg.channelId, cfg.commandName, cfg.streamElementsToken, response);
       sendLog(seOk ? 'Comando actualizado en StreamElements.' : 'No se pudo actualizar StreamElements.', seOk ? 'success' : 'warn');
       if (seOk) lastPublishedResponse = response;
-
-      if (isFast) {
-        fastPollInProgress = false;
-        if (fastPollTimer) { clearTimeout(fastPollTimer); fastPollTimer = null; }
-        sendLog('⚡ MMR nuevo detectado. Vigilancia post-partida completada.', 'success');
-      }
+      if (isFast) { fastPollInProgress = false; if (fastPollTimer) { clearTimeout(fastPollTimer); fastPollTimer = null; } sendLog('⚡ MMR nuevo detectado. Vigilancia post-partida completada.', 'success'); }
     } else if (isFast) {
       const delays = getFastPollDelays();
       const nextAttempt = Number(meta.attempt || 0) + 1;
@@ -383,10 +291,7 @@ async function poll(cfg, meta = {}) {
         fastPollAttempt = nextAttempt;
         sendLog(`⏳ Tracker.gg aún no refleja el resultado. Reintentando en ${delays[nextAttempt] / 1000}s...`, 'info');
         scheduleFastPoll(delays[nextAttempt], meta.generation, nextAttempt);
-      } else {
-        fastPollInProgress = false;
-        sendLog('Fin de vigilancia post-partida: Tracker.gg todavía no publicó un MMR nuevo después de 5 minutos.', 'warn');
-      }
+      } else { fastPollInProgress = false; sendLog('Fin de vigilancia post-partida: Tracker.gg todavía no publicó un MMR nuevo después de 5 minutos.', 'warn'); }
     } else {
       sendLog('Sin cambios en MMR/estadísticas.', 'info');
     }
@@ -395,16 +300,9 @@ async function poll(cfg, meta = {}) {
     if (isFast) {
       const delays = getFastPollDelays();
       const nextAttempt = Number(meta.attempt || 0) + 1;
-      if (delays[nextAttempt] != null && meta.generation === fastPollGeneration) {
-        fastPollAttempt = nextAttempt;
-        sendLog(`⚠️ Error durante vigilancia post-partida. Reintentando en ${delays[nextAttempt] / 1000}s...`, 'warn');
-        scheduleFastPoll(delays[nextAttempt], meta.generation, nextAttempt);
-      } else {
-        fastPollInProgress = false;
-      }
+      if (delays[nextAttempt] != null && meta.generation === fastPollGeneration) { fastPollAttempt = nextAttempt; sendLog(`⚠️ Error durante vigilancia post-partida. Reintentando en ${delays[nextAttempt] / 1000}s...`, 'warn'); scheduleFastPoll(delays[nextAttempt], meta.generation, nextAttempt); } else fastPollInProgress = false;
     }
   }
-
   if (isTracking && !isFast && !fastPollInProgress) {
     const interval = Math.min(Math.max(Number(mergeConfig(loadConfig()).pollInterval) || 10000, 5000), 30000);
     sendLog(`Próxima actualización en ${interval / 1000}s.`, 'info');
@@ -413,7 +311,5 @@ async function poll(cfg, meta = {}) {
 }
 
 rlStatsApi.on('connected', () => sendLog('Rocket League Stats API conectada. Detección de fin de partida activa.', 'success'));
-rlStatsApi.on('error', err => {
-  if (err.code !== 'ECONNREFUSED') sendLog(`Stats API: ${err.message}`, 'warn');
-});
+rlStatsApi.on('error', err => { if (err.code !== 'ECONNREFUSED') sendLog(`Stats API: ${err.message}`, 'warn'); });
 rlStatsApi.on('*', onStatsApiEvent);
