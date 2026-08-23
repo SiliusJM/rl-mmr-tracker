@@ -9,7 +9,7 @@ if (!gotLock) { app.quit(); process.exit(0); }
 app.on('second-instance', () => { if (mainWin) { if (mainWin.isMinimized()) mainWin.restore(); mainWin.focus(); } });
 
 const { updateCommand, testStreamElementsConnection } = require('./streamElements');
-const { updateSession } = require('./sessionTracker');
+const { updateSession, recordMatchResult } = require('./sessionTracker');
 const { scrapeProfile, closeBrowser, resetPrevSeasonCache } = require('./scraper');
 const rlStatsApi = require('./rlStatsApi');
 const obsServer = require('./obs-server');
@@ -62,7 +62,6 @@ const DEFAULT_CFG = {
   obsPort: 3030, obsEnabled: true, showPrevSeason1: true, showPrevSeason2: false,
   twitchCommandFormat: 'modes', twitchShowStats: false, twitchStatsToShow: [],
   fastPollEnabled: true,
-  // Post-match watch: seconds after match end. It keeps watching until 5 minutes.
   fastPollDelays: [2000, 4000, 7000, 12000, 20000, 30000, 45000, 60000, 90000, 120000, 180000, 240000, 300000],
   rlStatsApiHost: '127.0.0.1', rlStatsApiPort: 49123,
 };
@@ -75,30 +74,19 @@ function loadConfig() {
   } catch {}
   return { ...DEFAULT_CFG };
 }
-function saveConfig(cfg) { fs.writeFileSync(configPath(), JSON.stringify(cfg, null, 2), 'utf8'); }
 
 function normalizeFastPollDelays(cfg) {
   const defaults = DEFAULT_CFG.fastPollDelays;
   const raw = Array.isArray(cfg.fastPollDelays) ? cfg.fastPollDelays : defaults;
   const delays = raw.map(Number).filter(n => Number.isFinite(n) && n >= 0);
   if (!delays.length) return defaults;
-  // Convert legacy configurations containing the old 2/4/7/12/20s schedule
-  // to the extended post-match watch automatically.
   if (delays.length <= 5 && delays.join(',') === '2000,4000,7000,12000,20000') return defaults;
   return delays;
 }
 
-function mergeConfig(cfg) {
-  return { ...DEFAULT_CFG, ...cfg, fastPollDelays: normalizeFastPollDelays(cfg) };
-}
-
-function getFastPollDelays() {
-  return normalizeFastPollDelays(loadConfig());
-}
-
-function saveConfig(cfg) {
-  fs.writeFileSync(configPath(), JSON.stringify(mergeConfig(cfg), null, 2), 'utf8');
-}
+function mergeConfig(cfg) { return { ...DEFAULT_CFG, ...cfg, fastPollDelays: normalizeFastPollDelays(cfg) }; }
+function getFastPollDelays() { return normalizeFastPollDelays(loadConfig()); }
+function saveConfig(cfg) { fs.writeFileSync(configPath(), JSON.stringify(mergeConfig(cfg), null, 2), 'utf8'); }
 
 async function applyLiveConfig(cfg) {
   cfg = mergeConfig(cfg);
@@ -114,7 +102,7 @@ async function applyLiveConfig(cfg) {
     const response = buildResponse(lastData.modes, selectedIds, showRecord, lastData.session || { wins: 0, losses: 0 }, lastData.careerStats, cfg);
     const ok = await updateCommand(cfg.channelId, cfg.commandName, cfg.streamElementsToken, response);
     sendLog(ok ? 'Cambios aplicados al instante.' : 'Cambios aplicados localmente; no se pudo actualizar StreamElements.', ok ? 'success' : 'warn');
-    lastPublishedResponse = response;
+    if (ok) lastPublishedResponse = response;
   }
   return { applied: true };
 }
@@ -129,14 +117,16 @@ let lastData = null;
 let lastPublishedResponse = null;
 let lastMatchEndAt = 0;
 let fastPollInProgress = false;
+let rlLocalTeamNum = null;
+let lastHandledMatchGuid = null;
 
 (function initLastDataFromCache() {
   const cached = loadModesCache();
   if (cached && cached.length > 0) {
-    const cfg = mergeConfig(loadConfig());
+    const cachedCfg = mergeConfig(loadConfig());
     lastData = { modes: cached, prevSeason1: null, prevSeason2: null, session: { wins: 0, losses: 0 },
-      selectedModeIds: cfg.selectedModeIds || [10, 11, 13, 28], showRecord: cfg.showRecord !== false,
-      showPrevSeason1: cfg.showPrevSeason1 !== false, showPrevSeason2: cfg.showPrevSeason2 === true };
+      selectedModeIds: cachedCfg.selectedModeIds || [10, 11, 13, 28], showRecord: cachedCfg.showRecord !== false,
+      showPrevSeason1: cachedCfg.showPrevSeason1 !== false, showPrevSeason2: cachedCfg.showPrevSeason2 === true };
   }
 }());
 
@@ -202,28 +192,74 @@ function startFastPoll() {
   if (!isTracking) return;
   const cfg = mergeConfig(loadConfig());
   if (cfg.fastPollEnabled === false) return;
-
   const now = Date.now();
   if (now - lastMatchEndAt < 15000) return;
   lastMatchEndAt = now;
-
   cancelFastPoll();
   fastPollInProgress = true;
   const generation = fastPollGeneration;
   fastPollAttempt = 0;
   const delays = getFastPollDelays();
-
   sendLog(`🏁 Fin de partida detectado. Vigilancia post-partida: ${delays.map(d => d / 1000).join(' / ')}s (máx. 5 min).`, 'success');
   scheduleFastPoll(delays[0], generation, 0);
 }
 
-function onStatsApiEvent({ event }) {
-  const normalized = String(event || '').toLowerCase().replace(/[\s-]+/g, '_');
-  const isMatchEnd = (
-    /(?:match|game|playlist).*?(?:ended|end|finished|finish|complete|completed)/i.test(normalized) ||
-    /(?:ended|end|finished|finish|complete|completed).*?(?:match|game|playlist)/i.test(normalized)
-  );
-  if (isMatchEnd) startFastPoll();
+function normalizeName(value) { return String(value || '').trim().toLowerCase(); }
+
+function handleStatsUpdate(data) {
+  const cfg = mergeConfig(loadConfig());
+  const username = normalizeName(cfg.username);
+  if (!username || !data) return;
+  const players = Array.isArray(data.Players) ? data.Players : [];
+  const local = players.find(p => normalizeName(p.Name) === username || normalizeName(p.PlayerName) === username);
+  if (local && Number.isInteger(local.TeamNum)) rlLocalTeamNum = local.TeamNum;
+}
+
+async function publishImmediateMatchResult(result) {
+  if (!isTracking || !result) return;
+  const cfg = mergeConfig(loadConfig());
+  const sessionData = recordMatchResult(result);
+  if (sessionData.events?.length) for (const ev of sessionData.events) sendLog(ev.msg, ev.type);
+  if (!lastData || !Array.isArray(lastData.modes)) {
+    sendLog('Resultado detectado, pero todavía no hay datos de Tracker.gg para publicar el comando.', 'warn');
+    return;
+  }
+
+  lastData = { ...lastData, session: sessionData };
+  if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('data-update', lastData);
+  obsServer.setData(lastData);
+
+  const response = buildResponse(lastData.modes, cfg.selectedModeIds || [10, 11, 13, 28], cfg.showRecord !== false, sessionData, lastData.careerStats, cfg);
+  if (response === lastPublishedResponse) return;
+
+  sendLog(`📡 Publicando resultado inmediato en StreamElements...`, 'info');
+  const ok = await updateCommand(cfg.channelId, cfg.commandName, cfg.streamElementsToken, response);
+  sendLog(ok ? '✅ Resultado Ganado/Perdido actualizado inmediatamente en StreamElements.' : '⚠️ Resultado detectado, pero no se pudo actualizar StreamElements.', ok ? 'success' : 'warn');
+  if (ok) lastPublishedResponse = response;
+}
+
+function onStatsApiEvent({ event, data }) {
+  const normalized = String(event || '').toLowerCase();
+  if (normalized === 'updatestate') {
+    handleStatsUpdate(data);
+    return;
+  }
+  if (normalized !== 'matchended') return;
+
+  const matchGuid = data?.MatchGuid || null;
+  if (matchGuid && matchGuid === lastHandledMatchGuid) return;
+  if (matchGuid) lastHandledMatchGuid = matchGuid;
+
+  startFastPoll();
+
+  const winnerTeamNum = Number(data?.WinnerTeamNum);
+  if (!Number.isInteger(winnerTeamNum) || !Number.isInteger(rlLocalTeamNum)) {
+    sendLog('⚠️ Fin de partida detectado, pero no pude determinar el equipo local para publicar Ganado/Perdido inmediatamente.', 'warn');
+    return;
+  }
+
+  const result = winnerTeamNum === rlLocalTeamNum ? 'win' : 'loss';
+  publishImmediateMatchResult(result).catch(err => sendLog(`Error publicando resultado inmediato: ${err.message}`, 'error'));
 }
 
 ipcMain.handle('load-config', () => mergeConfig(loadConfig()));
@@ -270,6 +306,8 @@ ipcMain.handle('start-tracker', async () => {
   if (mainWin) mainWin.webContents.send('tracker-state', { running: true });
   resetPrevSeasonCache();
   lastPublishedResponse = null;
+  lastHandledMatchGuid = null;
+  rlLocalTeamNum = null;
   cancelFastPoll();
   if (cfg.fastPollEnabled !== false) {
     rlStatsApi.start({ host: cfg.rlStatsApiHost || '127.0.0.1', port: cfg.rlStatsApiPort || 49123 });
@@ -304,7 +342,6 @@ ipcMain.handle('stop-tracker', () => {
 async function poll(cfg, meta = {}) {
   if (!isTracking) return null;
   const isFast = meta.reason === 'match-end-fast';
-  // Never run the normal scheduler while a post-match watch is active.
   if (!isFast && fastPollInProgress) return null;
 
   try {
