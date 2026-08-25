@@ -6,49 +6,30 @@ Aplicacion de escritorio para streamers de Rocket League que rastrea tu MMR comp
 
 ---
 
-## Capturas
-
-| Tracker activo | Configuracion | Resultado en Twitch | Temporadas |
-|---|---|---|---|
-| ![Tracker](assets/screenshots/tracker-activo.png) | ![Configuracion](assets/screenshots/configuracion.png) | ![Twitch](assets/screenshots/twitch-chat.png) | ![Temporadas](assets/screenshots/temporadas.png) |
-
-| Perfil Completo | Formato Comando Twitch | Estadísticas en Comando | URL en OBS |
-|---|---|---|---|
-| ![Perfil](assets/screenshots/perfil-completo.png) | ![Formato](assets/screenshots/formato-comando-twitch.png) | ![Stats](assets/screenshots/estadisticas-comando.png) | ![URL](assets/screenshots/url-obs.png) |
-
-> Para ver las capturas en GitHub se encuentra dentro de la carpeta `assets/screenshots/`.
-
----
-
 ## Caracteristicas
 
 ### Tracking de MMR y Rangos
 - Muestra todos los modos clasificados de tu perfil (1v1, 2v2, 3v3, Rumble, Hoops, Dropshot, Snowday...)
 - **Modos auto-detectados desde la API** -- si Psyonix agrega o elimina un modo, la app lo refleja automaticamente sin actualizaciones
 - Contador de ganados/perdidos del dia (se resetea a medianoche)
-- Soporte para temporadas anteriores (hasta 2 temporadas atrás)
+- Soporte para temporadas anteriores (hasta 2 temporadas atras)
 - **Deteccion inmediata del resultado de la partida** mediante la Stats API local de Rocket League
 - **Vigilancia rapida de Tracker.gg despues de cada partida** para actualizar el MMR tan pronto como Tracker.gg publique el cambio
 
 ### Vista de Perfil Completo (OBS)
 - **URL:** `http://localhost:3030/obs/profile`
-- Estadísticas de la carrera: Tiros, Goles, Salvadas, Asistencias, MVPs, Ganados
+- Estadisticas de la carrera: Tiros, Goles, Salvadas, Asistencias, MVPs, Ganados
 - Rango mayor alcanzado en la temporada
-- Visión general de todos tus modos ranqueados con:
-  - Rango y MMR actual
-  - Partidos jugados
-  - Pico de MMR alcanzado
-- Actualización automática cada 5 segundos
-- Diseño profesional con fondo oscuro
-- Grid de 3 columnas con scroll horizontal para ver todos los modos
+- Vision general de todos tus modos ranqueados con rango, MMR, partidos jugados, racha y pico de MMR
+- Actualizacion automatica cada 5 segundos
 
 ### Comando de Twitch Personalizable
-Elige qué información mostrar en tu chat:
-- **Solo modos:** Muestra rangos y MMR (comportamiento por defecto)
-- **Solo estadísticas:** Muestra goles, tiros, salvadas, etc. de toda la carrera
-- **Ambos:** Combinación de modos + estadísticas
+Elige que informacion mostrar en tu chat:
+- **Solo modos:** Muestra rangos y MMR
+- **Solo estadisticas:** Muestra goles, tiros, salvadas, etc. de toda la carrera
+- **Ambos:** Combinacion de modos + estadisticas
 
-Selecciona exactamente qué estadísticas incluir:
+Selecciona exactamente que estadisticas incluir:
 - ⚽ Goles
 - 🎯 Tiros
 - 🛡️ Salvadas
@@ -60,16 +41,16 @@ Selecciona exactamente qué estadísticas incluir:
 - UI oscura con log de actividad en tiempo real
 - Configuracion guardada localmente en `config.json` (no se sube a GitHub)
 - Servidor OBS integrado para overlays personalizados
-- Compatible con todas las plataformas: Epic Games, Steam, PlayStation, Xbox
+- Compatible con Epic Games, Steam, PlayStation y Xbox
 
 ---
 
-## Inicio rapido (despues de `git clone`)
+## Inicio rapido
 
 ### Requisitos previos
 
-- [Node.js v18 o superior](https://nodejs.org) -- solo esto es necesario.
-- Una cuenta de [StreamElements](https://streamelements.com) con el bot activado en tu canal.
+- [Node.js v18 o superior](https://nodejs.org)
+- Una cuenta de [StreamElements](https://streamelements.com) con el bot activado en tu canal
 
 ### Primer uso
 
@@ -78,21 +59,18 @@ Selecciona exactamente qué estadísticas incluir:
    git clone https://github.com/SiliusJM/rl-mmr-tracker.git
    cd rl-mmr-tracker
    ```
-2. Haz doble clic en **`Iniciar.bat`**.
-   - La primera vez detecta que `node_modules/` no existe y ejecuta `npm install` automaticamente (puede tardar 1-2 minutos dependiendo de tu internet).
-   - Las siguientes veces abre la app directamente.
-3. Haz clic en **Configuracion**, completa los campos y guarda.
-4. Configura la **Rocket League Stats API** siguiendo la seccion correspondiente de este README.
+2. Ejecuta **`Iniciar.bat`**. La primera vez instalara automaticamente las dependencias.
+3. Abre **Configuracion**, completa los datos y guarda.
+4. Configura la **Rocket League Stats API** siguiendo la seccion correspondiente.
 5. Presiona **INICIAR**.
-6. Despues del primer ciclo abre **Configuracion**, selecciona los modos que quieres en tu chat y guarda.
 
-> Si prefieres la linea de comandos: `npm install` una sola vez, luego `npm start` cada vez.
+> Tambien puedes usar `npm install` y luego `npm start`.
 
 ---
 
 ## Configuracion de Rocket League Stats API
 
-La deteccion inmediata de victorias y derrotas utiliza la Stats API local de Rocket League. Esto permite que el resultado de la partida se publique en StreamElements sin esperar a que Tracker.gg actualice el MMR.
+La deteccion inmediata de victorias y derrotas utiliza la Stats API local de Rocket League. Esto permite publicar el resultado de la partida en StreamElements sin esperar a que Tracker.gg actualice el MMR.
 
 ### Archivo de configuracion
 
@@ -102,7 +80,7 @@ En Windows, abre:
 C:\Users\SILIUS\Documents\My Games\Rocket League\TAGame\Config\TAStatsAPI.ini
 ```
 
-> Si tu carpeta de usuario de Windows tiene otro nombre, sustituye `SILIUS` por tu nombre de usuario de Windows.
+> Si tu usuario de Windows tiene otro nombre, sustituye `SILIUS`.
 
 El archivo debe contener al menos:
 
@@ -116,24 +94,24 @@ PacketSendRate=10
 0=1785885193.000000
 ```
 
-**Importante:** `PacketSendRate=0` desactiva la Stats API. Para que el RL MMR Tracker pueda detectar el final de la partida, usa un valor positivo como `10`.
+**Importante:** `PacketSendRate=0` desactiva la Stats API. Usa un valor positivo como `10` para que RL MMR Tracker pueda detectar el final de la partida.
 
-### Después de modificar el archivo
+### Despues de modificar el archivo
 
 1. Cierra completamente Rocket League.
 2. Guarda `TAStatsAPI.ini`.
 3. Abre Rocket League nuevamente.
 4. Inicia RL MMR Tracker.
-5. Verifica en el log que aparezca:
+5. Verifica que aparezca:
    ```text
-   Rocket League Stats API conectada. Detección de fin de partida activa.
+   Rocket League Stats API conectada. Deteccion de fin de partida activa.
    ```
 
-No es necesario cambiar `Port=49123` ni `WebPort=49124` salvo que tengas una configuración diferente de forma intencionada.
+No es necesario cambiar `Port=49123` ni `WebPort=49124` salvo que tengas una configuracion diferente de forma intencionada.
 
-### ¿Qué hace la Stats API?
+### Que hace la Stats API?
 
-Cuando termina una partida, Rocket League informa el resultado al tracker mediante la conexión local. El programa puede entonces actualizar inmediatamente el contador `📊 Hoy: X Ganados - Y Perdidos`. Tracker.gg sigue consultándose por separado para obtener el nuevo MMR.
+Cuando termina una partida, Rocket League informa el resultado al tracker mediante la conexion local. El programa puede actualizar inmediatamente `📊 Hoy: X Ganados - Y Perdidos`. Tracker.gg sigue consultandose por separado para obtener el nuevo MMR.
 
 ---
 
@@ -144,32 +122,28 @@ Cuando termina una partida, Rocket League informa el resultado al tracker median
 | Campo | Que poner |
 |---|---|
 | Plataforma | `Epic Games`, `Steam`, `PSN` o `Xbox Live` |
-| Nombre de usuario | Tu nombre exacto en Rocket League (ej: `SILIUS XIX YT`). Los espacios se incluyen. |
+| Nombre de usuario | Tu nombre exacto en Rocket League |
 
-### 2. StreamElements -- Twitch o YouTube
-
-StreamElements funciona tanto si vinculaste Twitch como YouTube. Cada plataforma tiene su propio Channel ID dentro de StreamElements.
+### 2. StreamElements
 
 1. Ve a [streamelements.com](https://streamelements.com) e inicia sesion.
-2. Haz clic en tu avatar (arriba a la derecha) -> **Mi Cuenta** o **Channel settings** -> pestana **Channels**.
-3. **JWT Token:** copialo desde la columna JWT Token. Empieza con `eyJ...`
-4. **Account ID / Channel ID:** copialo desde la columna Account ID (ej: `69f239c3...`).
-   - Si tienes Twitch Y YouTube vinculados, asegurate de copiar los datos del canal donde tienes el bot de StreamElements **activo**, no el otro.
+2. Abre **Mi Cuenta / Channel settings / Channels**.
+3. Copia el **JWT Token**.
+4. Copia el **Account ID / Channel ID** del canal donde esta activo el bot.
 
-> **Importante:** mezclar el Account ID de una plataforma con el bot activo en la otra causa error de conexion aunque el JWT Token sea correcto.
+> Mezclar el Account ID de una plataforma con el bot activo en otra puede causar errores de conexion.
 
 ### 3. Comando de chat
 
-- **Nombre:** el comando que usaran los viewers (ej: `rangoo` -> el viewer escribe `!rangoo`).
-- El tracker actualiza ese comando automaticamente en cada ciclo.
+Indica el nombre del comando que usaran los viewers, por ejemplo `rangoo` para `!rangoo`.
 
 ---
 
 ## Intervalos de actualizacion y rendimiento
 
-El intervalo normal por defecto es de **10 segundos**. Se mantiene un minimo de 5 segundos y un maximo de 30 segundos para evitar una frecuencia excesiva de consultas normales a Tracker.gg.
+El intervalo normal por defecto es de **10 segundos**. Se mantiene un minimo de 5 segundos y un maximo de 30 segundos para limitar la frecuencia de consultas normales a Tracker.gg.
 
-Durante una partida, el tracker no necesita consultar continuamente Tracker.gg para conocer el resultado: la Stats API local informa el final de la partida. Al terminar, se activa una vigilancia especifica de Tracker.gg para detectar el nuevo MMR.
+Durante una partida, la app no necesita consultar continuamente Tracker.gg para saber si ganaste o perdiste: Rocket League Stats API informa el final de la partida. Al terminar, se activa una vigilancia especifica de Tracker.gg para detectar el nuevo MMR.
 
 ### Vigilancia post-partida
 
@@ -183,23 +157,56 @@ El proceso se detiene inmediatamente cuando Tracker.gg publica el nuevo MMR. Si 
 
 Durante esta vigilancia se pausa temporalmente el polling normal para evitar consultas duplicadas.
 
-### Resultados reales de las pruebas
+### Resultados reales de 22 partidas probadas
 
-Estos tiempos corresponden a pruebas reales realizadas con el tracker en funcionamiento. El **resultado Ganado/Perdido se publica inmediatamente al terminar la partida** mediante Rocket League Stats API. El tiempo del MMR depende de cuando Tracker.gg publica el nuevo dato.
+Se realizaron **22 partidas reales de prueba** con el tracker en funcionamiento. El resultado Ganado/Perdido se publico inmediatamente al terminar cada partida mediante Rocket League Stats API. El MMR dependio del momento en que Tracker.gg publico el nuevo valor.
 
-| Partida | Fin de partida | MMR confirmado | Tiempo hasta nuevo MMR |
-|---|---:|---:|---:|
-| Primera partida tras iniciar el tracker | 14:56:25 | 15:00:31 | **4 min 06 s** |
-| Segunda partida | 15:06:15 | 15:06:18 | **3 s** |
-| Tercera partida | 15:12:53 | 15:12:56 | **3 s** |
+En la muestra observada, los tiempos de actualizacion del MMR variaron bastante:
 
-**Conclusión de las pruebas:** la primera partida puede tardar varios minutos en reflejarse en Tracker.gg, mientras que las partidas siguientes de la misma sesión han mostrado una actualización del MMR mucho más rápida. En estas pruebas, las partidas segunda y tercera se actualizaron en aproximadamente **3 segundos**.
+- **Minimo observado:** aproximadamente **2 segundos**.
+- **La mayoria de resultados:** aproximadamente **2-10 segundos**.
+- Tambien se observaron casos de aproximadamente **31 s, 80 s y 157 s**.
+- En pruebas anteriores se observo un caso de aproximadamente **4 min 06 s**.
 
-> Estos tiempos son observaciones de pruebas concretas, no una garantía de tiempo fijo. Tracker.gg puede tardar más o menos en publicar cada resultado.
+Una secuencia representativa de la prueba de 22 partidas mostro tiempos como:
+
+```text
+10 s
+2 s
+3 s
+2 s
+80 s
+157 s
+31 s
+3 s
+3 s
+3 s
+3 s
+2 s
+3 s
+2 s
+16 s
+3 s
+3 s
+```
+
+Esto demuestra que **no existe un tiempo fijo de actualizacion del MMR por parte de Tracker.gg**. Cuando Tracker.gg ya tiene publicado el nuevo dato, RL MMR Tracker normalmente lo detecta en una de las primeras consultas. Cuando Tracker.gg todavia no lo ha publicado, la vigilancia continua automaticamente.
+
+### Resumen practico
+
+| Dato | Comportamiento observado |
+|---|---|
+| 🏁 Fin de partida | Inmediato |
+| 🏆 Victoria / ❌ Derrota | Inmediato, antes de Tracker.gg |
+| 📊 Contador diario | Inmediato |
+| 📈 MMR de Tracker.gg | Normalmente **2-10 s**, pero puede tardar mas |
+| ⏱️ Vigilancia maxima | **5 minutos** |
+
+> Estos tiempos son observaciones de pruebas reales y no una garantia. Tracker.gg puede tardar mas o menos en publicar cada resultado.
 
 ### Mensajes al terminar una partida
 
-La consola mantiene solo estos mensajes propios del resultado inmediato:
+La consola mantiene estos mensajes propios del resultado inmediato:
 
 ```text
 🏁 Fin de partida detectado.
@@ -214,56 +221,43 @@ Para una victoria, el segundo mensaje sera:
 🏆 Victoria detectada desde Rocket League.
 ```
 
-Los mensajes de las consultas de Tracker.gg y del resto del tracker permanecen sin cambios.
-
-### ¿Cuanto tarda en actualizarse el MMR?
-
-El resultado Ganado/Perdido puede actualizarse inmediatamente gracias a Rocket League Stats API. El MMR depende de cuando Tracker.gg publique el cambio. La app lo consulta con la vigilancia post-partida anterior y lo actualiza en cuanto aparece.
+Los mensajes de las consultas de Tracker.gg permanecen sin cambios.
 
 ### Consumo de recursos
 
-El tracker esta diseñado para correr en segundo plano sin afectar tu juego ni tu internet.
+El tracker esta disenado para correr en segundo plano sin afectar tu juego ni tu internet.
 
 | Recurso | Consumo aproximado |
 |---|---|
-| **RAM** | ~180-250 MB (Electron + Chromium en modo headless) |
-| **CPU** | <1% en reposo. Pico de 5-10% durante ~3-5 segundos por ciclo de actualizacion |
-| **Red** | ~0.5-2 MB por ciclo (carga la pagina del perfil en tracker.gg) |
-| **Disco** | Sin escritura continua. Solo guarda `config.json` al cambiar configuracion |
+| **RAM** | ~180-250 MB (Electron + Chromium headless) |
+| **CPU** | <1% en reposo. Pico de 5-10% durante el scraping |
+| **Red** | Depende del scraping y de las consultas post-partida |
+| **Disco** | Escritura local de configuracion y cache |
 
-**Impacto real en streaming/gaming: ninguno.**
-- El navegador corre headless (sin ventana visible) y solo se activa durante el scraping.
-- Las consultas rapidas post-partida son temporales y se detienen cuando Tracker.gg publica el MMR o al llegar a 5 minutos.
-- No interfiere con OBS, Rocket League ni con el ancho de banda de tu partida.
+Las consultas rapidas post-partida son temporales y se detienen cuando Tracker.gg publica el MMR o al llegar a 5 minutos.
 
 ---
 
-## Sobre los modos -- se actualiza si Psyonix agrega o elimina alguno?
+## Sobre los modos
 
-**Si, completamente automatico.** El programa no tiene ninguna lista de modos escrita en el codigo. En cada ciclo consulta la API de tracker.gg y lee los modos disponibles en ese momento. Esto significa:
-
-- Si Psyonix **elimina** un modo (ej. Snowday deja de tener ranked), desaparece solo de la app.
-- Si Psyonix **agrega** un modo nuevo, aparece en la app en el siguiente ciclo sin actualizar nada.
-- Los modos que no hayas jugado o que no aparezcan en tu perfil simplemente no se muestran.
-
-**No requiere mantenimiento del codigo.**
+Los modos se detectan automaticamente desde Tracker.gg. Si Psyonix agrega o elimina un modo, la app lo refleja en el siguiente ciclo.
 
 ---
 
 ## Ejemplo del comando en chat
 
-### Formato: Solo Modos (por defecto)
-```
+### Solo Modos
+```text
 🚀 Ranked Doubles 2v2: Champion II (1197) | Ranked Standard 3v3: Champion I (1162) | 📊 Hoy: 4 Ganados - 1 Perdidos
 ```
 
-### Formato: Solo Estadísticas
-```
+### Solo Estadisticas
+```text
 🚀 ⚽ 15,325 Goles | 🎯 34,176 Tiros | 🛡️ 13,818 Salvadas | 🤝 7,134 Asistencias
 ```
 
-### Formato: Ambos
-```
+### Ambos
+```text
 🚀 Ranked Doubles 2v2: Champion II (1197) | ⚽ 15,325 Goles | 🎯 34,176 Tiros | 📊 Hoy: 4 Ganados - 1 Perdidos
 ```
 
@@ -271,110 +265,79 @@ El tracker esta diseñado para correr en segundo plano sin afectar tu juego ni t
 
 ## OBS Overlays
 
-El tracker incluye un servidor HTTP local que proporciona varias vistas para usar como fuentes de navegador en OBS:
-
 ### Vista de Perfil Completo
 **URL:** `http://localhost:3030/obs/profile`
 
-Muestra tu perfil completo de Rocket League con:
-- Estadísticas de la carrera (Tiros, Goles, Salvadas, Asistencias, MVPs, Ganados)
+Muestra:
+- Estadisticas de carrera
 - Rango mayor alcanzado
-- Todos tus modos ranqueados con detalles completos
+- Todos los modos ranqueados
 
-**Configuración en OBS:**
+**Configuracion en OBS:**
 1. Fuentes → + → Fuente de navegador
 2. URL: `http://localhost:3030/obs/profile`
-3. Tamaño: 1200×900 px (recomendado)
-4. **NO** marcar "Fondo transparente" (la vista tiene su propio fondo)
+3. Tamaño recomendado: 1200×900 px
 
-### Otras Vistas Disponibles
-Para ver todas las vistas disponibles (modos individuales, sesión, etc.), abre en tu navegador:
-```
+### Otras vistas
+Abre:
+```text
 http://localhost:3030
 ```
 
-**Nota:** El puerto por defecto es 3030, pero puedes cambiarlo en Configuración → OBS Overlay.
+El puerto por defecto es `3030` y puede cambiarse desde Configuracion → OBS Overlay.
 
 ---
 
 ## Limitaciones Importantes
 
-### Estadísticas por Temporada
+### Estadisticas por Temporada
 
-Las estadísticas mostradas (Tiros, Goles, Salvadas, Asistencias, MVPs, Ganados) son de **TODA tu carrera** (lifetime), no solo de la temporada actual.
+Las estadisticas mostradas (Tiros, Goles, Salvadas, Asistencias, MVPs, Ganados) son de toda la carrera (lifetime), no solo de la temporada actual.
 
-**¿Por qué?**
-- La API de tracker.gg no proporciona estadísticas separadas por temporada
-- Epic Games no tiene una API pública para datos históricos por temporada
-- Los datos que ves en el cliente de Epic provienen de bases de datos privadas
+**Lo que SI esta disponible por temporada:**
+- Partidos jugados
+- Racha de victorias/derrotas
+- Pico de MMR alcanzado
+- Rango actual
 
-**Lo que SÍ está disponible por temporada (por modo):**
-- ✅ Partidos jugados
-- ✅ Racha de victorias/derrotas
-- ✅ Pico de MMR alcanzado
-- ✅ Rango actual
+**Lo que NO esta disponible por temporada:**
+- Tiros
+- Goles
+- Salvadas
+- Tiempo jugado
+- % de victorias exacto
 
-**Lo que NO está disponible por temporada:**
-- ❌ Tiros de la temporada
-- ❌ Goles de la temporada
-- ❌ Salvadas de la temporada
-- ❌ Tiempo jugado
-- ❌ % de victorias exacto
-
-Esto es una limitación de las APIs públicas disponibles, no del tracker.
+Esto depende de las APIs publicas disponibles.
 
 ---
 
 ## Estructura del proyecto
 
-```
+```text
 rl-mmr-tracker/
 ├── main.js                    # Proceso principal de Electron
-├── preload.js                 # Puente IPC seguro (contextBridge)
-├── scraper.js                 # Scraper de tracker.gg (puppeteer-extra + stealth)
+├── preload.js                 # Puente IPC seguro
+├── scraper.js                 # Scraper de tracker.gg
 ├── streamElements.js          # Cliente API de StreamElements
 ├── sessionTracker.js          # Contador de ganados/perdidos
 ├── rlStatsApi.js              # Listener local de Rocket League Stats API
 ├── obs-server.js              # Servidor HTTP para overlays de OBS
 ├── renderer/
-│   ├── index.html             # UI principal
-│   ├── app.js                 # Logica del frontend
-│   └── style.css              # Tema oscuro
+│   ├── index.html
+│   ├── app.js
+│   └── style.css
 ├── assets/
-│   └── screenshots/           # Capturas para el README
-├── Iniciar.bat                # Lanzador Windows (auto-instala dependencias)
+│   └── screenshots/
+├── Iniciar.bat
 ├── package.json
-└── .gitignore                 # config.json y tokens no se suben
+└── .gitignore
 ```
 
-> **Seguridad:** `config.json` (contiene nombre de usuario, JWT Token y Channel ID) esta en `.gitignore` y nunca se sube a los repositorios. Cada usuario configura sus propios datos localmente.
+> **Seguridad:** `config.json` contiene datos de configuracion y tokens locales y esta en `.gitignore`.
 
 ---
 
-## Changelog - Versión 1.2.0
-
-### Nuevas Funcionalidades
-
-**Vista de Perfil Completo para OBS**
-- Nueva URL: `http://localhost:3030/obs/profile`
-- Muestra estadísticas de carrera (Tiros, Goles, Salvadas, Asistencias, MVPs, Ganados)
-- Rango mayor alcanzado con icono
-- Visión general de todos los modos ranqueados
-- Actualización automática cada 5 segundos
-
-**Comando de Twitch Personalizable**
-- 3 formatos disponibles: Solo modos, Solo estadísticas, Ambos
-- Selección individual de qué estadísticas mostrar
-- Configuración flexible desde la interfaz
-
-**Mejoras en el Scraper**
-- Extracción de estadísticas de carrera (lifetime)
-- Datos extendidos por modo: partidos jugados, rachas, pico de MMR
-- Mejor manejo de datos de temporadas anteriores
-
----
-
-## Construir instalador .exe (opcional)
+## Construir instalador .exe
 
 ```bash
 npm run dist
