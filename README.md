@@ -183,6 +183,20 @@ El proceso se detiene inmediatamente cuando Tracker.gg publica el nuevo MMR. Si 
 
 Durante esta vigilancia se pausa temporalmente el polling normal para evitar consultas duplicadas.
 
+### Resultados reales de las pruebas
+
+Estos tiempos corresponden a pruebas reales realizadas con el tracker en funcionamiento. El **resultado Ganado/Perdido se publica inmediatamente al terminar la partida** mediante Rocket League Stats API. El tiempo del MMR depende de cuando Tracker.gg publica el nuevo dato.
+
+| Partida | Fin de partida | MMR confirmado | Tiempo hasta nuevo MMR |
+|---|---:|---:|---:|
+| Primera partida tras iniciar el tracker | 14:56:25 | 15:00:31 | **4 min 06 s** |
+| Segunda partida | 15:06:15 | 15:06:18 | **3 s** |
+| Tercera partida | 15:12:53 | 15:12:56 | **3 s** |
+
+**Conclusión de las pruebas:** la primera partida puede tardar varios minutos en reflejarse en Tracker.gg, mientras que las partidas siguientes de la misma sesión han mostrado una actualización del MMR mucho más rápida. En estas pruebas, las partidas segunda y tercera se actualizaron en aproximadamente **3 segundos**.
+
+> Estos tiempos son observaciones de pruebas concretas, no una garantía de tiempo fijo. Tracker.gg puede tardar más o menos en publicar cada resultado.
+
 ### Mensajes al terminar una partida
 
 La consola mantiene solo estos mensajes propios del resultado inmediato:
