@@ -157,9 +157,11 @@ El proceso se detiene inmediatamente cuando Tracker.gg publica el nuevo MMR. Si 
 
 Durante esta vigilancia se pausa temporalmente el polling normal para evitar consultas duplicadas.
 
-### Resultados reales de las 22 partidas probadas
+### Resultados reales de la prueba
 
-Se realizaron **22 partidas reales de prueba**. La siguiente tabla toma como referencia la hora de `🏁 Fin de partida detectado` y la hora de `📈 MMR confirmado por Tracker.gg`.
+Se tomo como inicio la prueba que comienza con `14:49:42 Listo. Configura tu cuenta y presiona INICIAR.` y como final el ultimo resultado enviado en el log, `17:22:46`. En el log proporcionado aparecen **20 partidas completas con hora de fin y confirmacion de MMR**. Si se incluyen otras 2 partidas realizadas pero no presentes en ese bloque de log, el total de la sesion fue de 22 partidas; la tabla siguiente solo contabiliza las partidas que tienen ambos timestamps visibles en los datos enviados.
+
+El tiempo se calcula desde `🏁 Fin de partida detectado` hasta `📈 MMR confirmado por Tracker.gg`.
 
 | Partida | Resultado | Tiempo hasta MMR |
 | -------: | :-------- | ---------------: |
@@ -183,20 +185,18 @@ Se realizaron **22 partidas reales de prueba**. La siguiente tabla toma como ref
 | 18 | 🏆 Victoria (+9) | 3 s |
 | 19 | 🏆 Victoria (+9) | 2 s |
 | 20 | ❌ Derrota (-9) | 30 s |
-| 21 | ❌ Derrota (-18) | 3 s |
-| 22 | 🏆 Victoria (+8) | 3 s |
 
-### Resumen de las 22 pruebas
+### Resumen de la prueba
 
 - **Minimo observado:** 2 segundos.
-- **Mayoria de partidas:** 2-3 segundos.
-- **Muchas partidas:** dentro de los primeros 10 segundos.
-- Casos mas lentos observados: **31 s**, **42 s**, **1 min 14 s**, **2 min 37 s** y **4 min 06 s**.
+- La gran mayoria de las partidas visibles en el log se actualizaron en **2-3 segundos**.
+- Varias partidas se actualizaron dentro de los primeros 10 segundos.
+- Tiempos altos observados: **31 s**, **42 s**, **1 min 14 s**, **2 min 37 s** y **4 min 06 s**.
 - El resultado Ganado/Perdido se publica **inmediatamente al terminar la partida**, sin depender del retraso de Tracker.gg.
 - Cuando Tracker.gg ya tiene publicado el nuevo MMR, el tracker normalmente lo detecta en las primeras consultas.
 - Cuando Tracker.gg todavia no lo ha publicado, la vigilancia continua automaticamente hasta 5 minutos.
 
-> Estos tiempos son observaciones de pruebas reales y no una garantia de tiempo fijo. El tiempo de actualizacion del MMR depende de cuando Tracker.gg publique el nuevo resultado.
+> **Importante:** estos tiempos son resultados reales de la prueba enviada y no una garantia de tiempo fijo. El tiempo de actualizacion del MMR depende de cuando Tracker.gg publique el nuevo resultado.
 
 ### Resumen practico
 
@@ -229,7 +229,7 @@ Los mensajes de las consultas de Tracker.gg permanecen sin cambios.
 
 ### Consumo de recursos
 
-El tracker esta disenado para correr en segundo plano sin afectar tu juego ni tu internet.
+El tracker esta diseñado para correr en segundo plano sin afectar tu juego ni tu internet.
 
 | Recurso | Consumo aproximado |
 |---|---|
