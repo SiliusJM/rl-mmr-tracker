@@ -157,40 +157,46 @@ El proceso se detiene inmediatamente cuando Tracker.gg publica el nuevo MMR. Si 
 
 Durante esta vigilancia se pausa temporalmente el polling normal para evitar consultas duplicadas.
 
-### Resultados reales de 22 partidas probadas
+### Resultados reales de las 22 partidas probadas
 
-Se realizaron **22 partidas reales de prueba** con el tracker en funcionamiento. El resultado Ganado/Perdido se publico inmediatamente al terminar cada partida mediante Rocket League Stats API. El MMR dependio del momento en que Tracker.gg publico el nuevo valor.
+Se realizaron **22 partidas reales de prueba**. La siguiente tabla toma como referencia la hora de `🏁 Fin de partida detectado` y la hora de `📈 MMR confirmado por Tracker.gg`.
 
-En la muestra observada, los tiempos de actualizacion del MMR variaron bastante:
+| Partida | Resultado | Tiempo hasta MMR |
+| -------: | :-------- | ---------------: |
+| 1 | 🏆 Victoria (+9) | **4 min 06 s** |
+| 2 | 🏆 Victoria (+9) | 3 s |
+| 3 | ❌ Derrota (-9) | 3 s |
+| 4 | 🏆 Victoria (+9) | 3 s |
+| 5 | ❌ Derrota (-9) | **1 min 14 s** |
+| 6 | 🏆 Victoria (+9) | 10 s |
+| 7 | ❌ Derrota (-10) | 2 s |
+| 8 | 🏆 Victoria (+10) | 3 s |
+| 9 | ❌ Derrota (-9) | 2 s |
+| 10 | 🏆 Victoria (+9) | **42 s** |
+| 11 | 🏆 Victoria (+9) | **2 min 37 s** |
+| 12 | ❌ Derrota (-9) | **31 s** |
+| 13 | ❌ Derrota (-10) | 3 s |
+| 14 | ❌ Derrota (-9) | 3 s |
+| 15 | ❌ Derrota (-19) | 3 s |
+| 16 | ❌ Derrota (-9) | 3 s |
+| 17 | ❌ Derrota (-9) | 2 s |
+| 18 | 🏆 Victoria (+9) | 3 s |
+| 19 | 🏆 Victoria (+9) | 2 s |
+| 20 | ❌ Derrota (-9) | 30 s |
+| 21 | ❌ Derrota (-18) | 3 s |
+| 22 | 🏆 Victoria (+8) | 3 s |
 
-- **Minimo observado:** aproximadamente **2 segundos**.
-- **La mayoria de resultados:** aproximadamente **2-10 segundos**.
-- Tambien se observaron casos de aproximadamente **31 s, 80 s y 157 s**.
-- En pruebas anteriores se observo un caso de aproximadamente **4 min 06 s**.
+### Resumen de las 22 pruebas
 
-Una secuencia representativa de la prueba de 22 partidas mostro tiempos como:
+- **Minimo observado:** 2 segundos.
+- **Mayoria de partidas:** 2-3 segundos.
+- **Muchas partidas:** dentro de los primeros 10 segundos.
+- Casos mas lentos observados: **31 s**, **42 s**, **1 min 14 s**, **2 min 37 s** y **4 min 06 s**.
+- El resultado Ganado/Perdido se publica **inmediatamente al terminar la partida**, sin depender del retraso de Tracker.gg.
+- Cuando Tracker.gg ya tiene publicado el nuevo MMR, el tracker normalmente lo detecta en las primeras consultas.
+- Cuando Tracker.gg todavia no lo ha publicado, la vigilancia continua automaticamente hasta 5 minutos.
 
-```text
-10 s
-2 s
-3 s
-2 s
-80 s
-157 s
-31 s
-3 s
-3 s
-3 s
-3 s
-2 s
-3 s
-2 s
-16 s
-3 s
-3 s
-```
-
-Esto demuestra que **no existe un tiempo fijo de actualizacion del MMR por parte de Tracker.gg**. Cuando Tracker.gg ya tiene publicado el nuevo dato, RL MMR Tracker normalmente lo detecta en una de las primeras consultas. Cuando Tracker.gg todavia no lo ha publicado, la vigilancia continua automaticamente.
+> Estos tiempos son observaciones de pruebas reales y no una garantia de tiempo fijo. El tiempo de actualizacion del MMR depende de cuando Tracker.gg publique el nuevo resultado.
 
 ### Resumen practico
 
@@ -199,10 +205,8 @@ Esto demuestra que **no existe un tiempo fijo de actualizacion del MMR por parte
 | 🏁 Fin de partida | Inmediato |
 | 🏆 Victoria / ❌ Derrota | Inmediato, antes de Tracker.gg |
 | 📊 Contador diario | Inmediato |
-| 📈 MMR de Tracker.gg | Normalmente **2-10 s**, pero puede tardar mas |
+| 📈 MMR de Tracker.gg | Generalmente 2-10 s, pero puede tardar mas |
 | ⏱️ Vigilancia maxima | **5 minutos** |
-
-> Estos tiempos son observaciones de pruebas reales y no una garantia. Tracker.gg puede tardar mas o menos en publicar cada resultado.
 
 ### Mensajes al terminar una partida
 
