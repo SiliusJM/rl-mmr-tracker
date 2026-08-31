@@ -78,7 +78,7 @@ Selecciona exactamente qué estadísticas incluir:
    git clone https://github.com/SiliusJM/rl-mmr-tracker.git
    cd rl-mmr-tracker
    ```
-2. Haz doble clic en **`Iniciar.bat`**.
+2. Haz doble clic en **`RL-MMR.bat`**.
    - La primera vez detecta que `node_modules/` no existe y ejecuta `npm install` automaticamente (puede tardar 1-2 minutos dependiendo de tu internet).
    - Las siguientes veces abre la app directamente.
 3. Haz clic en **Configuracion**, completa los campos y guarda.
@@ -339,11 +339,6 @@ La pantalla principal también muestra un resumen en vivo de los modos activos, 
 
 El orden de la pantalla es: perfil completo, resumen actual, sesión, modos individuales, todos los modos seleccionados y temporadas anteriores. Las secciones de overlays se pueden minimizar o expandir; al seleccionar una tarjeta de modo o partidas de hoy se abre automáticamente el bloque correspondiente.
 
-Las variantes de OBS se entregan con dimensiones ampliadas y contenido interno proporcional (iconos, textos y MMR) para conservar nitidez al escalar en OBS. El espaciado interno se mantiene compacto para evitar huecos y ninguna variante supera los 675 px de ancho ni los 685 px de alto.
-
-Las variantes compacta, línea de rango, mínima y dividida priorizan textos e iconos más legibles sin agrandar innecesariamente el número MMR. Las variantes verticales `tall` y `stacked` reducen su altura para evitar espacio vacío, mientras que `all?variant=compact` usa contenido ampliado dentro del límite de 675 px.
-
-Los rangos con división se presentan en dos líneas (por ejemplo, `Grand Champion III` y `Division IV`) para mejorar la lectura en tarjetas estrechas.
 
 ### Ajustes recientes de overlays
 
@@ -397,7 +392,7 @@ rl-mmr-tracker/
 │   └── style.css              # Tema oscuro
 ├── assets/
 │   └── screenshots/           # Capturas para el README
-├── Iniciar.bat                # Lanzador Windows (auto-instala dependencias)
+├── RL-MMR.bat                # Lanzador Windows (auto-instala dependencias)
 ├── package.json
 └── .gitignore                 # config.json y tokens no se suben
 ```
