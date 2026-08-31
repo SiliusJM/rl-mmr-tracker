@@ -31,7 +31,19 @@ function loadModesCache() {
   return null;
 }
 function saveModesCache(modes) {
-  try { fs.writeFileSync(MODES_CACHE_PATH, JSON.stringify(modes, null, 2), 'utf8'); } catch {}
+  try { fs.writeFileSync(MODES_CACHE_PATH, JSON.stringify(stripRuntimeModeFields(modes), null, 2), 'utf8'); } catch {}
+}
+function stripRuntimeModeFields(modes) {
+  return (Array.isArray(modes) ? modes : []).map(({ mmrDelta, ...mode }) => mode);
+}
+function withMmrChanges(modes, previousModes) {
+  const previousById = new Map((Array.isArray(previousModes) ? previousModes : []).map(mode => [String(mode.id), Number(mode.mmr)]));
+  return (Array.isArray(modes) ? modes : []).map(mode => {
+    const current = Number(mode.mmr);
+    const previous = previousById.get(String(mode.id));
+    const mmrDelta = Number.isFinite(current) && Number.isFinite(previous) ? current - previous : null;
+    return { ...mode, mmrDelta };
+  });
 }
 
 function buildResponse(modes, selectedIds, showRecord, session, careerStats, cfg) {
@@ -54,8 +66,8 @@ function buildResponse(modes, selectedIds, showRecord, session, careerStats, cfg
 
 const DEFAULT_CFG = {
   platform: 'epic', username: '', streamElementsToken: '', channelId: '', commandName: 'rango',
-  // 10s is the default; the UI/config can still choose a slower interval if desired.
-  pollInterval: 10000, selectedModeIds: [10, 11, 13, 28], showRecord: true,
+  // Normal tracking is deliberately moderate. Fast checks after a match are handled separately below.
+  pollInterval: 30000, selectedModeIds: [10, 11, 13, 28], showRecord: true,
   obsPort: 3030, obsEnabled: true, showPrevSeason1: true, showPrevSeason2: false,
   twitchCommandFormat: 'modes', twitchShowStats: false, twitchStatsToShow: [],
   fastPollEnabled: true,
@@ -82,7 +94,11 @@ function normalizeFastPollDelays(cfg) {
   if (delays.length <= 5 && delays.join(',') === '2000,4000,7000,12000,20000') return defaults;
   return delays;
 }
-function mergeConfig(cfg) { return { ...DEFAULT_CFG, ...cfg, fastPollDelays: normalizeFastPollDelays(cfg) }; }
+function normalizePollInterval(value) {
+  // Keep this aligned with the settings UI: 30 seconds to 10 minutes.
+  return Math.min(Math.max(Number(value) || DEFAULT_CFG.pollInterval, 30000), 600000);
+}
+function mergeConfig(cfg) { return { ...DEFAULT_CFG, ...cfg, pollInterval: normalizePollInterval(cfg.pollInterval), fastPollDelays: normalizeFastPollDelays(cfg) }; }
 function getFastPollDelays() { return normalizeFastPollDelays(loadConfig()); }
 function saveConfig(cfg) { fs.writeFileSync(configPath(), JSON.stringify(mergeConfig(cfg), null, 2), 'utf8'); }
 
@@ -266,7 +282,7 @@ async function poll(cfg, meta = {}) {
   try {
     sendLog(isFast ? '⚡ Consulta rápida de Tracker.gg...' : 'Consultando tracker.gg...', 'info');
     const scraped = await scrapeProfile(cfg.platform, cfg.username);
-    const modes = scraped.modes;
+    const modes = withMmrChanges(scraped.modes, lastData?.modes);
     const careerStats = scraped.careerStats;
     const sessionData = updateSession(modes);
     if (sessionData.events?.length) for (const ev of sessionData.events) sendLog(ev.msg, ev.type);
@@ -304,7 +320,7 @@ async function poll(cfg, meta = {}) {
     }
   }
   if (isTracking && !isFast && !fastPollInProgress) {
-    const interval = Math.min(Math.max(Number(mergeConfig(loadConfig()).pollInterval) || 10000, 5000), 30000);
+    const interval = normalizePollInterval(mergeConfig(loadConfig()).pollInterval);
     sendLog(`Próxima actualización en ${interval / 1000}s.`, 'info');
     pollTimer = setTimeout(() => poll(loadConfig(), { reason: 'normal' }), interval);
   }

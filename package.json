@@ -23,6 +23,7 @@
       "sessionTracker.js",
       "scraper.js",
       "rlStatsApi.js",
+      "obs-server.js",
       "index.js",
       "node_modules/**"
     ],
