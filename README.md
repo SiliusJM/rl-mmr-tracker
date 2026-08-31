@@ -14,7 +14,7 @@ Aplicacion de escritorio para streamers de Rocket League que rastrea tu MMR comp
 
 | Perfil Completo | Formato Comando Twitch | Estadísticas en Comando | URL en OBS |
 |---|---|---|---|
-| ![Perfil](assets/screenshots/perfil-completo.png) | ![Formato](assets/screenshots/formato-comando-twitch.png) | ![Stats](assets/screenshots/estadisticas-comando.png) | ![URL](assets/screenshots/url-obs.png) |
+| ![Perfil](assets/screenshots/perfil-completo.jpg) | ![Formato](assets/screenshots/formato-comando-twitch.png) | ![Stats](assets/screenshots/estadisticas-comando.png) | ![URL](assets/screenshots/url-obs.png) |
 
 > Para ver las capturas en GitHub se encuentra dentro de la carpeta `assets/screenshots/`.
 
