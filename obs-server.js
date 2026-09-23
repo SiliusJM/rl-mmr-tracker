@@ -69,7 +69,7 @@ function page(body, css, script) {
     ${css}
   </style>
 </head>
-<body>${body}<script>${script}
+  <body>${body}<script>window.orderCasualLast = window.orderCasualLast || function(list){return (Array.isArray(list)?list:[]).slice().sort((a,b)=>Number(/casual/i.test(String(a?.name||'')))-Number(/casual/i.test(String(b?.name||''))));};${script}
 // Shared overlay bootstrap: render immediately, then refresh only on tracker changes.
 (function(){
   window.esc = window.esc || function(value){return String(value ?? '')
@@ -134,41 +134,49 @@ const SEASONS = [
 
 function previewMarkup(kind, title, subtitle, width, height) {
   if (kind.startsWith('session-')) {
-    const label = kind === 'session-compact' || kind === 'session-minimal' ? ['WIN', 'LOSS'] : ['WINS', 'LOSSES'];
-    return `<div class="preview preview-session preview-session-${esc(kind)}">
+    const variant = kind.slice('session-'.length);
+    const label = ['compact', 'pills', 'minimal'].includes(variant) ? ['WIN', 'LOSS'] : ['WINS', 'LOSSES'];
+    return `<div class="preview preview-session preview-session-${esc(variant)}">
       <div class="preview-chip">Preview</div>
-      <div class="preview-title">${esc(title)}</div>
-      <div class="preview-session-row">
-        <div class="pv-stat win"><b>4</b><span>${label[0]}</span></div>
-        <div class="pv-divider"></div>
-        <div class="pv-stat loss"><b>2</b><span>${label[1]}</span></div>
+      <div class="session-art">
+        ${['compact', 'pills', 'minimal'].includes(variant) ? '' : `<div class="session-art-heading">Match<br>record</div>`}
+        <div class="preview-session-row">
+          <div class="pv-stat win"><b>4</b><span>${label[0]}</span></div>
+          <div class="pv-divider"></div>
+          <div class="pv-stat loss"><b>2</b><span>${label[1]}</span></div>
+        </div>
       </div>
-      <div class="preview-foot">${width} x ${height}</div>
+      <div class="preview-foot">${esc(title)} · ${width} x ${height}</div>
     </div>`;
   }
 
   if (kind.startsWith('card-')) {
-    const large = kind === 'card-broadcast' || kind === 'card-split';
-    const mmr = kind === 'card-minimal' ? 'MMR' : '1056';
-    const icon = latestData.modes.find(m => m && m.iconUrl) || null;
-    const iconMarkup = icon ? `<img class="${large ? 'pv-icon large' : 'pv-icon'}" src="${esc(icon.iconUrl)}" alt="">` : `<div class="${large ? 'pv-icon large' : 'pv-icon'}"></div>`;
-    return `<div class="preview preview-card preview-card-${esc(kind)}">
-      ${iconMarkup}
-      <div class="preview-chip">Preview</div>
-      <div class="preview-title">${esc(title)}</div>
-      ${subtitle ? `<div class="preview-subtitle">${esc(subtitle)}</div>` : ''}
-      <div class="preview-mmr">${mmr}</div>
-    </div>`;
+    const variant = kind.slice('card-'.length);
+    const icon = '<div class="pv-icon">◆</div>';
+    const info = `<div class="pv-info"><div class="pv-mode">Ranked Doubles 2v2</div><div class="pv-rank">Champion I - Division I</div></div>`;
+    const verticalInfo = `<div class="pv-info"><div class="pv-rank">Champion I - Division I</div></div>`;
+    const mmr = `<div class="pv-mmr"><b>1056</b><span>+8 MMR</span></div>`;
+    let content;
+    if (variant === 'broadcast') content = `<div class="pv-broadcast-icon">${icon}</div>${info}${mmr}`;
+    else if (variant === 'split') content = `<div class="pv-split-icon">${icon}</div>${info}${mmr}`;
+    else if (variant === 'classic' || variant === 'neon' || variant === 'tall') content = `<div class="pv-mode">Ranked Doubles 2v2</div>${icon}${verticalInfo}<div class="pv-mmr"><b>1056</b><span>+8 MMR</span></div>`;
+    else content = `${icon}${info}${mmr}`;
+    return `<div class="preview preview-card preview-card-${esc(variant)}"><div class="preview-chip">Preview</div><div class="card-art">${content}</div></div>`;
+  }
+
+  if (kind.startsWith('all-')) {
+    const compact = kind === 'all-compact';
+    const entries = [['2v2', 'C I · Div I', '1056'], ['3v3', 'C I · Div I', '1083'], ['Rumble', 'C I · Div IV', '1042']];
+    return `<div class="preview preview-all ${compact ? 'preview-all-compact' : 'preview-all-cards'}"><div class="preview-chip">Preview · ${esc(title)}</div><div class="all-art">${entries.map(([mode, rank, mmr]) => `<div class="all-entry"><i>◆</i><span>${mode}<small>${rank}</small></span><b>${mmr}</b></div>`).join('')}</div><div class="preview-foot">${width} x ${height}</div></div>`;
   }
 
   if (kind === 'profile') {
     return `<div class="preview preview-profile">
       <div class="preview-chip">Preview</div>
-      <div class="preview-title">${esc(title)}</div>
-      <div class="preview-profile-grid">
-        <span>GOLES</span><span>DISPAROS</span><span>VICTORIAS</span><span>ASISTENCIAS</span>
-      </div>
-      <div class="preview-foot">${width} x ${height}</div>
+      <div class="profile-art"><b>Career statistics</b><div class="preview-profile-grid">
+        <span>SHOTS <strong>1,284</strong></span><span>GOALS <strong>342</strong></span><span>SAVES <strong>216</strong></span><span>ASSISTS <strong>98</strong></span><span>MVPs <strong>44</strong></span><span>WINS <strong>510</strong></span>
+      </div><div class="profile-modes"><i>◆ 2v2 Champion I · 1056</i><i>◆ 3v3 Champion I · 1083</i></div></div>
+      <div class="preview-foot">${esc(title)} · ${width} x ${height}</div>
     </div>`;
   }
 
@@ -310,7 +318,7 @@ const variant = ${JSON.stringify(CARD_VARIANTS.map(v => v[0]))}.includes(q.get('
 const modeId = q.get('mode');
 const season = q.get('season') || 'current';
 const seasonName = { prev1: 'PREVIOUS SEASON', prev2: '2 SEASONS AGO' };
-function rankHtml(value){ return String(value || 'Unranked').split(/\s+-\s+/).map(esc).join('<br>'); }
+function rankHtml(value){ return String(value || 'Unranked').split(/\\s+-\\s+/).map(esc).join('<br>'); }
 function delta(m){
   if (m.mmrDelta == null || !Number.isFinite(Number(m.mmrDelta))) return '<div class="label">MMR</div>';
   const n = Number(m.mmrDelta);
@@ -323,7 +331,7 @@ function render(d){
     document.getElementById('overlay').innerHTML = '<div class="empty">Season disabled in tracker settings.</div>';
     return;
   }
-  const list = season === 'prev1' ? d.prevSeason1 : season === 'prev2' ? d.prevSeason2 : d.modes;
+  const list = orderCasualLast(season === 'prev1' ? d.prevSeason1 : season === 'prev2' ? d.prevSeason2 : d.modes);
   const m = Array.isArray(list) && list.find(x => String(x.id) === String(modeId));
   const root = document.getElementById('overlay');
   if (!m) {
@@ -383,13 +391,13 @@ const q = new URLSearchParams(location.search);
 const season = q.get('season') || 'current';
 const variant = q.get('variant') === 'compact' ? 'compact' : 'cards';
 const explicit = q.get('modes') ? q.get('modes').split(',') : null;
-function rankHtml(value){ return String(value || 'Unranked').split(/\s+-\s+/).map(esc).join('<br>'); }
+function rankHtml(value){ return String(value || 'Unranked').split(/\\s+-\\s+/).map(esc).join('<br>'); }
 function render(d){
   if ((season === 'prev1' && d.showPrevSeason1 === false) || (season === 'prev2' && d.showPrevSeason2 !== true)) {
     document.getElementById('overlay').innerHTML = '<div class="empty">Season disabled in tracker settings.</div>';
     return;
   }
-  const source = season === 'prev1' ? d.prevSeason1 : season === 'prev2' ? d.prevSeason2 : d.modes;
+  const source = orderCasualLast(season === 'prev1' ? d.prevSeason1 : season === 'prev2' ? d.prevSeason2 : d.modes);
   const selected = explicit || (d.selectedModeIds || []).map(String);
   const modes = Array.isArray(source) ? source.filter(m => selected.includes(String(m.id))) : [];
   const root = document.getElementById('overlay');
@@ -423,7 +431,7 @@ function stat(label,value){return '<div class="stat"><b>'+esc(value||0)+'</b><sp
 function render(d){
   const root = document.getElementById('overlay');
   const c = d.careerStats || {};
-  const modes = (d.modes || []).filter(m => (d.selectedModeIds || []).some(id => String(id) === String(m.id)));
+  const modes = orderCasualLast(d.modes).filter(m => (d.selectedModeIds || []).some(id => String(id) === String(m.id)));
   const ranked = modes.filter(m => m.peakRank || m.peakRating);
   const highest = ranked.slice().sort((a,b)=>(Number(b.peakRating)||0)-(Number(a.peakRating)||0))[0] || modes[0] || {};
   root.innerHTML = '<section class="section"><div class="title">📈 Estadísticas de carrera</div><div class="stats">' +
@@ -448,7 +456,7 @@ function indexPageHtml(port) {
     (seasonInfo[0] === 'prev1' ? latestData.showPrevSeason1 !== false : latestData.showPrevSeason2 === true));
   const selectedCards = visibleSeasons.flatMap(seasonInfo =>
     ALL_VARIANTS.map(v =>
-      overlayCard(port, `/obs/all?season=${seasonInfo[0]}&variant=${v[0]}`, `${seasonInfo[1]} - ${v[1]}`, v[2], v[3], '', `card-${v[0]}`, seasonInfo[2])
+      overlayCard(port, `/obs/all?season=${seasonInfo[0]}&variant=${v[0]}`, `${seasonInfo[1]} - ${v[1]}`, v[2], v[3], '', `all-${v[0]}`, seasonInfo[2])
     )
   ).join('');
 
@@ -493,8 +501,16 @@ function indexPageHtml(port) {
     .preview-card .preview-mmr{margin-top:auto;font-size:16px;font-weight:950;color:#c4b5fd;line-height:1}
     .preview-card .preview-title{font-size:11px;white-space:normal;line-height:1.1}
     .preview-card .preview-subtitle{max-width:100%;line-height:1.15}
-.preview-card .pv-icon{width:34px;height:34px;border-radius:50%;clip-path:polygon(50% 0,88% 25%,100% 68%,50% 100%,0 68%,12% 25%)}.preview-card .pv-icon.large{width:38px;height:38px}.preview-card .preview-title{font-size:10px;line-height:1.1;max-height:24px}.preview-card .preview-subtitle{font-size:9px;line-height:1.1;max-height:20px}.preview-card .preview-foot{font-size:9px}
-    .preview-card .pv-icon{width:34px;height:34px;border-radius:50%;clip-path:polygon(50% 0,88% 25%,100% 68%,50% 100%,0 68%,12% 25%)}.preview-card .pv-icon.large{width:38px;height:38px}.preview-card .preview-title{font-size:10px;line-height:1.1;max-height:24px}.preview-card .preview-subtitle{font-size:9px;line-height:1.1;max-height:20px}.preview-card .preview-foot{font-size:9px}
+    .preview-card .preview-foot{font-size:9px}
+    .card-art{display:flex;position:relative;width:100%;height:82px;min-width:0;align-items:center;gap:7px;padding:7px;border:1px solid rgba(167,139,250,.28);border-radius:8px;background:linear-gradient(135deg,#15172e,#080a14);overflow:hidden;text-align:left}
+    .pv-icon{display:flex;flex:none;width:29px;height:29px;align-items:center;justify-content:center;color:#e9d5ff;font-size:23px;text-shadow:0 0 8px #a78bfa}
+    .pv-info{display:flex;min-width:0;flex:1;flex-direction:column;gap:3px}.pv-mode{color:#a5acc9;font-size:7px;font-weight:900;letter-spacing:.6px;text-transform:uppercase}.pv-rank{color:#f6f3ff;font-size:9px;font-weight:850;line-height:1.05}
+    .pv-mmr{display:flex;flex:none;flex-direction:column;align-items:flex-end;gap:2px;color:#c4b5fd}.pv-mmr b{font-size:17px;line-height:1}.pv-mmr span{color:#34d399;font-size:7px;font-weight:900;white-space:nowrap}
+    .preview-card-classic .card-art,.preview-card-neon .card-art,.preview-card-tall .card-art{height:82px;flex-direction:column;justify-content:center;gap:2px;text-align:center}.preview-card-classic .pv-icon,.preview-card-neon .pv-icon,.preview-card-tall .pv-icon{height:30px}.preview-card-classic .pv-info,.preview-card-neon .pv-info,.preview-card-tall .pv-info{align-items:center}.preview-card-classic .pv-mmr,.preview-card-neon .pv-mmr,.preview-card-tall .pv-mmr{align-items:center}.preview-card-neon .card-art{border-color:#c4b5fd;box-shadow:0 0 13px rgba(139,92,246,.4),inset 0 0 12px rgba(139,92,246,.12)}
+    .preview-card-broadcast .card-art{background:linear-gradient(90deg,rgba(167,36,148,.7) 0 24%,#090c14 24%)}.pv-broadcast-icon,.pv-split-icon{display:flex;align-self:stretch;align-items:center;justify-content:center;flex:none;width:24%;margin:-7px 0 -7px -7px;background:rgba(124,58,237,.32)}.pv-split-icon{background:linear-gradient(135deg,#7c3aed,#1e293b);border-right:1px solid #4c3f96}.preview-card-split .card-art{padding-left:0}.preview-card-minimal .card-art{gap:4px}.preview-card-minimal .pv-mode{font-size:5px}.preview-card-minimal .pv-rank{font-size:7px}.preview-card-minimal .pv-mmr b{font-size:19px}
+    .preview-session{justify-content:center}.session-art{display:flex;width:100%;height:88px;align-items:center;justify-content:center;gap:8px;padding:7px;border:1px solid rgba(167,139,250,.28);border-radius:9px;background:linear-gradient(135deg,#15172e,#080a14)}.session-art-heading{color:#c7d2fe;font-size:8px;font-weight:900;letter-spacing:.6px;text-transform:uppercase}.preview-session-row{display:flex;align-items:center;justify-content:space-around;gap:7px;width:100%;max-width:175px}.pv-stat{display:flex;flex:1;flex-direction:column;align-items:center;gap:2px}.pv-stat b{font-size:23px;line-height:1}.pv-stat span{font-size:7px;font-weight:900;letter-spacing:.5px}.pv-stat.win b,.pv-stat.win span{color:#34d399}.pv-stat.loss b,.pv-stat.loss span{color:#fb7185}.pv-divider{height:27px;width:1px;background:rgba(167,139,250,.4)}
+    .preview-session-classic .session-art{width:120px;flex-direction:column}.preview-session-scoreboard .session-art{justify-content:space-between}.preview-session-scoreboard .preview-session-row{max-width:120px}.preview-session-compact .session-art{height:56px}.preview-session-compact .pv-stat b{font-size:17px}.preview-session-pills .pv-stat{padding:6px 2px;border-radius:999px;background:rgba(255,255,255,.06)}.preview-session-stacked .session-art{width:115px;flex-direction:column}.preview-session-stacked .preview-session-row{flex-direction:column;gap:3px}.preview-session-stacked .pv-divider{display:none}.preview-session-stacked .pv-stat{flex-direction:row;justify-content:space-around;padding:3px 6px;border-radius:5px;background:rgba(255,255,255,.05)}.preview-session-neon .session-art{border-color:#c4b5fd;box-shadow:0 0 14px rgba(139,92,246,.36),inset 0 0 12px rgba(139,92,246,.12)}.preview-session-minimal .session-art{height:55px;border:0;background:transparent}.preview-session-minimal .pv-stat b{font-size:29px}.preview-session-wide .session-art{height:57px}.preview-all .all-art{display:flex;width:100%;height:81px;align-items:center;justify-content:center;gap:4px}.all-entry{display:flex;min-width:0;flex:1;flex-direction:column;align-items:center;gap:2px;padding:4px;border:1px solid rgba(167,139,250,.25);border-radius:5px;background:#111428}.all-entry i{color:#c4b5fd;font-size:13px;font-style:normal}.all-entry span{font-size:7px;color:#a5acc9;text-align:center}.all-entry small{display:block;color:#f6f3ff;font-size:6px}.all-entry b{color:#c4b5fd;font-size:11px}.preview-all-compact .all-art{flex-direction:row;align-items:center;gap:3px}.preview-all-compact .all-entry{flex-direction:row;justify-content:center;gap:2px;padding:5px 3px}.preview-all-compact .all-entry i{font-size:8px}.preview-all-compact .all-entry span{flex:1;text-align:left;font-size:5px}.preview-all-compact .all-entry small{display:none}.preview-all-compact .all-entry b{font-size:7px}
+    .profile-art{display:flex;width:100%;flex-direction:column;gap:4px;padding:6px;border:1px solid rgba(167,139,250,.28);border-radius:7px;background:linear-gradient(135deg,#15172e,#080a14)}.profile-art>b{color:#c4b5fd;font-size:8px;text-transform:uppercase}.preview-profile-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;width:100%}.preview-profile-grid span{padding:3px;border-radius:4px;background:rgba(255,255,255,.05);color:#a5acc9;font-size:6px}.preview-profile-grid strong{display:block;color:#f6f3ff;font-size:8px}.profile-modes{display:flex;gap:3px}.profile-modes i{overflow:hidden;flex:1;padding:3px;border-radius:3px;background:rgba(255,255,255,.05);color:#c4b5fd;font-size:5px;font-style:normal;white-space:nowrap}
     .preview-card-broadcast{flex-direction:row;align-items:center;gap:10px;padding:10px 12px;text-align:left;background:linear-gradient(90deg,rgba(167,36,148,.22) 0,rgba(9,12,20,.88) 28%)}
     .preview-card-broadcast .preview-title{font-size:10px}.preview-card-broadcast .preview-mmr{font-size:20px}.preview-card-broadcast .pv-icon{width:34px;height:34px}
     .preview-card-compact{gap:4px}.preview-card-compact .preview-mmr{font-size:14px}
@@ -571,22 +587,22 @@ function indexPageHtml(port) {
     const rankIcons = ${JSON.stringify([...new Set((latestData.modes || []).map(m=>m && m.iconUrl).filter(Boolean))])};
     const sessionSection=document.getElementById('session-overlays'); if(sessionSection){sessionSection.removeAttribute('open');sessionSection.open=false;}
     function clean(s){return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+    function orderCasualLast(list){return (Array.isArray(list)?list:[]).slice().sort((a,b)=>Number(/casual/i.test(String(a?.name||'')))-Number(/casual/i.test(String(b?.name||''))));}
     function copy(url,b){navigator.clipboard?.writeText(url).then(()=>{b.textContent='Copied';setTimeout(()=>b.textContent='Copy URL',1100)}).catch(()=>prompt('Copy this URL:',url));}
     function previewMarkup(kind,title,subtitle,w,h){
-      if(kind.startsWith('session-')) return '<div class="preview preview-session preview-session-'+clean(kind)+'"><div class="preview-chip">Preview</div><div class="preview-title">'+clean(title)+'</div><div class="preview-session-row"><div class="pv-stat win"><b>4</b><span>'+(kind==='session-compact'||kind==='session-minimal'?'WIN':'WINS')+'</span></div><div class="pv-divider"></div><div class="pv-stat loss"><b>2</b><span>'+(kind==='session-compact'||kind==='session-minimal'?'LOSS':'LOSSES')+'</span></div></div><div class="preview-foot">'+w+' x '+h+'</div></div>';
+      if(kind.startsWith('session-')){const variant=kind.slice(8),compact=['compact','pills','minimal'].includes(variant),labels=compact?['WIN','LOSS']:['WINS','LOSSES'];return '<div class="preview preview-session preview-session-'+clean(variant)+'"><div class="preview-chip">Preview</div><div class="session-art">'+(compact?'':'<div class="session-art-heading">Match<br>record</div>')+'<div class="preview-session-row"><div class="pv-stat win"><b>4</b><span>'+labels[0]+'</span></div><div class="pv-divider"></div><div class="pv-stat loss"><b>2</b><span>'+labels[1]+'</span></div></div></div><div class="preview-foot">'+clean(title)+' · '+w+' x '+h+'</div></div>';}
       if(kind.startsWith('card-')){
-        const iconClass=(kind==='card-broadcast'||kind==='card-split')?'pv-icon large':'pv-icon';
-        const sub=subtitle?'<div class="preview-subtitle">'+clean(subtitle)+'</div>':'';
-        const mmr=kind==='card-minimal'?'MMR':'1056';
-        const icon=rankIcons.length?'<img class="'+iconClass+'" src="'+clean(rankIcons[Math.floor(Math.random()*rankIcons.length)])+'" alt="">':'<div class="'+iconClass+'"></div>';
-        return '<div class="preview preview-card preview-card-'+clean(kind)+'">'+icon+'<div class="preview-chip">Preview</div><div class="preview-title">'+clean(title)+'</div>'+sub+'<div class="preview-mmr">'+mmr+'</div></div>';
+        const variant=kind.slice(5),icon=rankIcons.length?'<img class="pv-icon" src="'+clean(rankIcons[0])+'" alt="">':'<div class="pv-icon">◆</div>',info='<div class="pv-info"><div class="pv-mode">Ranked Doubles 2v2</div><div class="pv-rank">'+clean(subtitle||'Champion I - Division I')+'</div></div>',verticalInfo='<div class="pv-info"><div class="pv-rank">'+clean(subtitle||'Champion I - Division I')+'</div></div>',mmr='<div class="pv-mmr"><b>1056</b><span>+8 MMR</span></div>';
+        let content;if(variant==='broadcast')content='<div class="pv-broadcast-icon">'+icon+'</div>'+info+mmr;else if(variant==='split')content='<div class="pv-split-icon">'+icon+'</div>'+info+mmr;else if(['classic','neon','tall'].includes(variant))content='<div class="pv-mode">Ranked Doubles 2v2</div>'+icon+verticalInfo+mmr;else content=icon+info+mmr;
+        return '<div class="preview preview-card preview-card-'+clean(variant)+'"><div class="preview-chip">Preview</div><div class="card-art">'+content+'</div></div>';
       }
-      if(kind==='profile') return '<div class="preview preview-profile"><div class="preview-chip">Preview</div><div class="preview-title">'+clean(title)+'</div><div class="preview-profile-grid"><span>GOLES</span><span>DISPAROS</span><span>VICTORIAS</span><span>ASISTENCIAS</span></div><div class="preview-foot">'+w+' x '+h+'</div></div>';
+      if(kind.startsWith('all-')){const compact=kind==='all-compact',entries=[['2v2','C I · Div I','1056'],['3v3','C I · Div I','1083'],['Rumble','C I · Div IV','1042']];return '<div class="preview preview-all '+(compact?'preview-all-compact':'preview-all-cards')+'"><div class="preview-chip">Preview · '+clean(title)+'</div><div class="all-art">'+entries.map(([mode,rank,mmr])=>'<div class="all-entry"><i>◆</i><span>'+mode+'<small>'+rank+'</small></span><b>'+mmr+'</b></div>').join('')+'</div><div class="preview-foot">'+w+' x '+h+'</div></div>';}
+      if(kind==='profile') return '<div class="preview preview-profile"><div class="preview-chip">Preview</div><div class="profile-art"><b>Career statistics</b><div class="preview-profile-grid"><span>SHOTS <strong>1,284</strong></span><span>GOALS <strong>342</strong></span><span>SAVES <strong>216</strong></span><span>ASSISTS <strong>98</strong></span><span>MVPs <strong>44</strong></span><span>WINS <strong>510</strong></span></div><div class="profile-modes"><i>◆ 2v2 Champion I · 1056</i><i>◆ 3v3 Champion I · 1083</i></div></div><div class="preview-foot">'+clean(title)+' · '+w+' x '+h+'</div></div>';
       return '<div class="preview"><div class="preview-chip">Preview</div><div class="preview-title">'+clean(title)+'</div><div class="preview-bars"><span></span><span></span><span></span></div><div class="preview-foot">'+w+' x '+h+'</div></div>';
     }
     function card(path,name,w,h,kind,subtitle){const url='http://localhost:'+port+path;return '<article class="linkcard">'+previewMarkup(kind||'default',name,subtitle,w,h)+'<div class="name">'+clean(name)+'</div><div class="size">Recommended: '+w+' x '+h+' px</div><a class="url" href="'+clean(path)+'" target="_blank">'+clean(url)+'</a><button class="copy" data-url="'+clean(url)+'" onclick="copy(this.dataset.url,this)">Copy URL</button></article>';}
     function show(d){
-      const ids=(d.selectedModeIds||[]).map(String), current=Array.isArray(d.modes)?d.modes:[], selected=current.filter(m=>ids.includes(String(m.id))), modes=selected.length?selected:current;
+      const ids=(d.selectedModeIds||[]).map(String), current=orderCasualLast(d.modes), selected=current.filter(m=>ids.includes(String(m.id))), modes=selected.length?selected:current;
       const live=document.getElementById('live-dashboard'), root=document.getElementById('modes');
       const session=d.session||{wins:0,losses:0};
       if(!modes.length){live.innerHTML='<div class="empty-state">Esperando datos del tracker...</div>';root.innerHTML='<div class="empty-state">Esperando modos seleccionados...</div>';return;}
@@ -596,7 +612,7 @@ function indexPageHtml(port) {
       if(prev2Section) prev2Section.hidden=d.showPrevSeason2!==true;
       const activeIds=selected.length?ids:current.map(m=>String(m.id));
       const modeCard=m=>'<a class="live-card" href="#mode-'+clean(m.id)+'">'+(m.iconUrl?'<img class="rank-icon" src="'+clean(m.iconUrl)+'" alt="">':'')+'<div class="mode">'+clean(m.name)+'</div><div class="rank">'+clean(m.rank||'Unranked')+'</div><div class="mmr">'+clean(m.mmr||0)+' <small>MMR</small></div></a>';
-      enabled.filter(s=>s[0]!=='current').forEach(s=>{const source=s[0]==='prev1'?d.prevSeason1:d.prevSeason2;const rows=Array.isArray(source)?source.filter(m=>activeIds.includes(String(m.id))):[];const target=document.getElementById('season-'+s[0]);if(target) target.innerHTML=rows.length?'<div class="live-grid">'+rows.map(modeCard).join('')+'</div>':'<div class="empty-state">No hay datos disponibles para esta temporada.</div>';});
+      enabled.filter(s=>s[0]!=='current').forEach(s=>{const source=orderCasualLast(s[0]==='prev1'?d.prevSeason1:d.prevSeason2);const rows=source.filter(m=>activeIds.includes(String(m.id)));const target=document.getElementById('season-'+s[0]);if(target) target.innerHTML=rows.length?'<div class="live-grid">'+rows.map(modeCard).join('')+'</div>':'<div class="empty-state">No hay datos disponibles para esta temporada.</div>';});
       live.innerHTML='<div class="live-grid">'+modes.map(modeCard).join('')+'</div><a class="live-session" href="#session-overlays"><span>Partidas de hoy</span><b class="win">'+clean(session.wins||0)+'</b><span>Ganadas</span><b class="loss">'+clean(session.losses||0)+'</b><span>Perdidas</span></a>';
       root.innerHTML=modes.map(m=>'<div class="mode-block" id="mode-'+clean(m.id)+'"><details><summary>'+clean(m.name)+' · '+clean(m.rank||'Unranked')+' · '+clean(m.mmr||0)+' MMR</summary>'+enabled.map(s=>'<div class="season-title"><span>'+clean(s[1])+'</span><span class="tag">'+clean(s[2])+'</span></div><div class="grid">'+cardVariants.map(v=>card('/obs/card?mode='+encodeURIComponent(m.id)+'&season='+s[0]+'&variant='+v[0],v[1],v[2],v[3],'card-'+v[0],m.rank)).join('')+'</div>').join('')+'</details></div>').join('');
     }
