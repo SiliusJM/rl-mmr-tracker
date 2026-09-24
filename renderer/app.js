@@ -44,9 +44,14 @@ function addLog({ msg, type = 'info', time = new Date().toLocaleTimeString() }) 
 }
 
 /* ── Rank cards ── */
+function orderedModes(modes) {
+  return (Array.isArray(modes) ? modes : []).slice().sort((a, b) =>
+    Number(/casual/i.test(String(a.name || ''))) - Number(/casual/i.test(String(b.name || ''))));
+}
+
 function renderCards(container, modes, selectedIds, dimClass) {
   container.innerHTML = '';
-  for (const mode of modes) {
+  for (const mode of orderedModes(modes)) {
     const selected = selectedIds.includes(mode.id);
     const card = document.createElement('div');
     const cls  = dimClass || (selected ? 'active' : 'dimmed');
@@ -73,7 +78,7 @@ function refreshModeChecklist(selectedIds) {
     return;
   }
   checklist.innerHTML = '';
-  for (const mode of availableModes) {
+  for (const mode of orderedModes(availableModes)) {
     const label = document.createElement('label');
     label.className = 'mode-check-label';
     const checked = (selectedIds || []).includes(mode.id) ? 'checked' : '';
@@ -171,7 +176,7 @@ async function saveSettings() {
 
   await window.tracker.saveConfig(cfg);
   addLog({ msg: 'Configuración guardada.', type: 'success' });
-  if (availableModes.length > 0) renderCards(availableModes, currentSelectedIds);
+  if (availableModes.length > 0) renderCards(cardsSection, availableModes, currentSelectedIds, null);
   closeSettings();
   // If tracker is running, apply changes immediately without waiting for next cycle
   if (running) {

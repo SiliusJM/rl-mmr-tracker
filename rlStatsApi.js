@@ -15,6 +15,7 @@ const DEFAULT_PORT = 49123;
 let socket = null;
 let reconnectTimer = null;
 let stopped = true;
+let connected = false;
 let buffer = '';
 let handlers = new Map();
 let options = {};
@@ -114,6 +115,8 @@ function connect() {
   client.setTimeout(Number(options.connectTimeoutMs) || 5000);
 
   client.on('connect', () => {
+    if (socket !== client || stopped) return;
+    connected = true;
     client.setTimeout(0);
     console.log(`[RL Stats API] Conectado a ${host}:${port}`);
     emit('connected', { host, port });
@@ -127,15 +130,23 @@ function connect() {
 
   client.on('error', err => {
     // ECONNREFUSED is expected when Rocket League is closed or Stats API is disabled.
-    if (err.code !== 'ECONNREFUSED') {
+    if (err.code !== 'ECONNREFUSED' && err.code !== 'ECONNRESET') {
       console.warn('[RL Stats API] Error:', err.message);
     }
-    emit('error', err);
+    if (socket === client) {
+      const wasConnected = connected;
+      connected = false;
+      if (wasConnected) emit('disconnected', err);
+      emit('error', err);
+    }
   });
 
   client.on('close', () => {
-    if (socket === client) socket = null;
-    emit('disconnected');
+    if (socket !== client) return;
+    socket = null;
+    const wasConnected = connected;
+    connected = false;
+    if (wasConnected) emit('disconnected');
     scheduleReconnect();
   });
 
@@ -151,6 +162,7 @@ function start(opts = {}) {
 
 function stop() {
   stopped = true;
+  connected = false;
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
@@ -174,7 +186,7 @@ function off(event, listener) {
 }
 
 function isConnected() {
-  return !!socket && !socket.destroyed;
+  return connected && !!socket && !socket.destroyed;
 }
 
 module.exports = { start, stop, on, off, isConnected };

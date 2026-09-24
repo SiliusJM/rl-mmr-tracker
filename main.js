@@ -122,6 +122,12 @@ async function applyLiveConfig(cfg) {
 let mainWin;
 let isTracking = false;
 let pollTimer = null;
+let pollInProgress = false;
+let pollGeneration = 0;
+let statsApiConnected = false;
+let statsApiEverConnected = false;
+let pollImmediatelyAfterCurrent = false;
+let manualPollPending = false;
 let fastPollTimer = null;
 let fastPollGeneration = 0;
 let fastPollAttempt = 0;
@@ -151,7 +157,7 @@ function createWindow() {
       if (isTracking && lastData) mainWin.webContents.send('data-update', lastData);
     }
   });
-  mainWin.on('closed', () => { isTracking = false; cancelFastPoll(); if (pollTimer) clearTimeout(pollTimer); rlStatsApi.stop(); closeBrowser().catch(() => {}); mainWin = null; });
+  mainWin.on('closed', () => { isTracking = false; statsApiConnected = false; pollGeneration++; cancelFastPoll(); if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } rlStatsApi.stop(); closeBrowser().catch(() => {}); mainWin = null; });
 }
 
 app.whenReady().then(async () => {
@@ -176,6 +182,17 @@ function cancelFastPoll() {
   if (fastPollTimer) { clearTimeout(fastPollTimer); fastPollTimer = null; }
   fastPollInProgress = false;
 }
+function canAutoPoll() {
+  return statsApiConnected;
+}
+function scheduleNormalPoll() {
+  if (!isTracking || !canAutoPoll() || fastPollInProgress || pollTimer) return;
+  const interval = normalizePollInterval(mergeConfig(loadConfig()).pollInterval);
+  pollTimer = setTimeout(() => {
+    pollTimer = null;
+    poll(loadConfig(), { reason: 'normal' });
+  }, interval);
+}
 function scheduleFastPoll(delayMs, generation, attempt) {
   if (!isTracking || generation !== fastPollGeneration) return;
   if (fastPollTimer) clearTimeout(fastPollTimer);
@@ -193,7 +210,7 @@ function startFastPoll() {
   const generation = fastPollGeneration;
   fastPollAttempt = 0;
   const delays = getFastPollDelays();
-  sendLog('🏁 Fin de partida detectado.', 'success');
+  sendLog('🏁 Fin de partida detectado. Esperando actualización de Tracker.gg…', 'success');
   scheduleFastPoll(delays[0], generation, 0);
 }
 
@@ -230,6 +247,7 @@ function onStatsApiEvent({ event, data }) {
   const normalized = String(event || '').toLowerCase();
   if (normalized === 'updatestate') { handleStatsUpdate(data); return; }
   if (normalized !== 'matchended') return;
+  if (mergeConfig(loadConfig()).fastPollEnabled === false) return;
   const matchGuid = data?.MatchGuid || null;
   if (matchGuid && matchGuid === lastHandledMatchGuid) return;
   if (matchGuid) lastHandledMatchGuid = matchGuid;
@@ -265,23 +283,38 @@ ipcMain.handle('start-tracker', async () => {
   sendLog('Conexión con StreamElements verificada.', 'success');
   if (mainWin) mainWin.webContents.send('tracker-state', { running: true });
   resetPrevSeasonCache(); lastPublishedResponse = null; lastHandledMatchGuid = null; rlLocalTeamNum = null; cancelFastPoll();
-  if (cfg.fastPollEnabled !== false) { rlStatsApi.start({ host: cfg.rlStatsApiHost || '127.0.0.1', port: cfg.rlStatsApiPort || 49123 }); sendLog('Detector de fin de partida iniciado.', 'info'); }
-  poll(cfg);
+  statsApiConnected = false;
+  statsApiEverConnected = false;
+  pollImmediatelyAfterCurrent = false;
+  manualPollPending = false;
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+  pollGeneration++;
+  rlStatsApi.start({ host: cfg.rlStatsApiHost || '127.0.0.1', port: cfg.rlStatsApiPort || 49123 });
+  sendLog(cfg.fastPollEnabled === false ? 'Conexión con Rocket League Stats API iniciada.' : 'Detector de fin de partida iniciado.', 'info');
   return true;
 });
 ipcMain.handle('get-status', () => ({ running: isTracking, data: lastData, fastPoll: fastPollInProgress, statsApiConnected: rlStatsApi.isConnected() }));
 ipcMain.handle('get-modes-cache', () => loadModesCache());
 ipcMain.handle('get-obs-info', () => ({ port: obsServer.getPort() || (loadConfig().obsPort || 3030), running: obsServer.isRunning() }));
-ipcMain.handle('force-poll', () => { if (!isTracking) return false; if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } setImmediate(() => poll(loadConfig(), { reason: 'manual' })); return true; });
-ipcMain.handle('stop-tracker', () => { isTracking = false; cancelFastPoll(); if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } rlStatsApi.stop(); closeBrowser().catch(() => {}); sendLog('Tracker detenido.', 'info'); if (mainWin) mainWin.webContents.send('tracker-state', { running: false }); return true; });
+ipcMain.handle('force-poll', () => { if (!isTracking) return false; if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } if (pollInProgress) manualPollPending = true; else setImmediate(() => poll(loadConfig(), { reason: 'manual' })); return true; });
+ipcMain.handle('stop-tracker', () => { isTracking = false; statsApiConnected = false; pollGeneration++; pollImmediatelyAfterCurrent = false; manualPollPending = false; cancelFastPoll(); if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } rlStatsApi.stop(); closeBrowser().catch(() => {}); sendLog('Tracker detenido.', 'info'); if (mainWin) mainWin.webContents.send('tracker-state', { running: false }); return true; });
 
 async function poll(cfg, meta = {}) {
   if (!isTracking) return null;
+  if (pollInProgress) {
+    if (meta.reason === 'match-end-fast' && meta.generation === fastPollGeneration) {
+      scheduleFastPoll(250, meta.generation, meta.attempt);
+    }
+    return null;
+  }
   const isFast = meta.reason === 'match-end-fast';
   if (!isFast && fastPollInProgress) return null;
+  if (meta.reason !== 'manual' && !canAutoPoll()) return null;
+  pollInProgress = true;
+  const generation = pollGeneration;
   try {
-    sendLog(isFast ? '⚡ Consulta rápida de Tracker.gg...' : 'Consultando tracker.gg...', 'info');
     const scraped = await scrapeProfile(cfg.platform, cfg.username);
+    if (!isTracking || generation !== pollGeneration || !canAutoPoll()) return null;
     const modes = withMmrChanges(scraped.modes, lastData?.modes);
     const careerStats = scraped.careerStats;
     const sessionData = updateSession(modes);
@@ -299,33 +332,56 @@ async function poll(cfg, meta = {}) {
       const seOk = await updateCommand(cfg.channelId, cfg.commandName, cfg.streamElementsToken, response);
       sendLog(seOk ? 'Comando actualizado en StreamElements.' : 'No se pudo actualizar StreamElements.', seOk ? 'success' : 'warn');
       if (seOk) lastPublishedResponse = response;
-      if (isFast) { fastPollInProgress = false; if (fastPollTimer) { clearTimeout(fastPollTimer); fastPollTimer = null; } sendLog('⚡ MMR nuevo detectado. Vigilancia post-partida completada.', 'success'); }
+      if (isFast) { fastPollInProgress = false; if (fastPollTimer) { clearTimeout(fastPollTimer); fastPollTimer = null; } sendLog('✅ MMR actualizado. Vigilancia post-partida completada.', 'success'); }
     } else if (isFast) {
       const delays = getFastPollDelays();
       const nextAttempt = Number(meta.attempt || 0) + 1;
       if (delays[nextAttempt] != null && meta.generation === fastPollGeneration) {
         fastPollAttempt = nextAttempt;
-        sendLog(`⏳ Tracker.gg aún no refleja el resultado. Reintentando en ${delays[nextAttempt] / 1000}s...`, 'info');
+        sendLog(`⏳ Tracker.gg todavía no actualiza el MMR. Próximo intento en ${delays[nextAttempt] / 1000} s.`, 'info');
         scheduleFastPoll(delays[nextAttempt], meta.generation, nextAttempt);
       } else { fastPollInProgress = false; sendLog('Fin de vigilancia post-partida: Tracker.gg todavía no publicó un MMR nuevo después de 5 minutos.', 'warn'); }
-    } else {
-      sendLog('Sin cambios en MMR/estadísticas.', 'info');
     }
   } catch (err) {
-    sendLog(err.message, 'error');
+    if (!isTracking || generation !== pollGeneration) return null;
     if (isFast) {
       const delays = getFastPollDelays();
       const nextAttempt = Number(meta.attempt || 0) + 1;
-      if (delays[nextAttempt] != null && meta.generation === fastPollGeneration) { fastPollAttempt = nextAttempt; sendLog(`⚠️ Error durante vigilancia post-partida. Reintentando en ${delays[nextAttempt] / 1000}s...`, 'warn'); scheduleFastPoll(delays[nextAttempt], meta.generation, nextAttempt); } else fastPollInProgress = false;
+      if (delays[nextAttempt] != null && meta.generation === fastPollGeneration) { fastPollAttempt = nextAttempt; sendLog(`⚠️ Error de Tracker.gg durante la vigilancia post-partida. Próximo intento en ${delays[nextAttempt] / 1000} s.`, 'warn'); scheduleFastPoll(delays[nextAttempt], meta.generation, nextAttempt); } else { fastPollInProgress = false; sendLog(`Finalizó la vigilancia post-partida por un error de Tracker.gg: ${err.message}`, 'error'); }
+    } else sendLog(err.message, 'error');
+  } finally {
+    pollInProgress = false;
+    if (isTracking && !fastPollInProgress) {
+      if (pollImmediatelyAfterCurrent && canAutoPoll()) {
+        pollImmediatelyAfterCurrent = false;
+        manualPollPending = false;
+        setImmediate(() => poll(loadConfig(), { reason: 'normal' }));
+      } else if (manualPollPending) {
+        manualPollPending = false;
+        setImmediate(() => poll(loadConfig(), { reason: 'manual' }));
+      } else scheduleNormalPoll();
     }
-  }
-  if (isTracking && !isFast && !fastPollInProgress) {
-    const interval = normalizePollInterval(mergeConfig(loadConfig()).pollInterval);
-    sendLog(`Próxima actualización en ${interval / 1000}s.`, 'info');
-    pollTimer = setTimeout(() => poll(loadConfig(), { reason: 'normal' }), interval);
   }
 }
 
-rlStatsApi.on('connected', () => sendLog('Rocket League Stats API conectada. Detección de fin de partida activa.', 'success'));
-rlStatsApi.on('error', err => { if (err.code !== 'ECONNREFUSED') sendLog(`Stats API: ${err.message}`, 'warn'); });
+rlStatsApi.on('connected', () => {
+  statsApiConnected = true;
+  if (!isTracking) return;
+  sendLog(statsApiEverConnected ? '✅ Rocket League Stats API conectada. Consultas reanudadas.' : 'Rocket League Stats API conectada. Polling de Tracker.gg iniciado.', 'success');
+  statsApiEverConnected = true;
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+  if (pollInProgress) pollImmediatelyAfterCurrent = true;
+  poll(loadConfig(), { reason: 'normal' });
+});
+rlStatsApi.on('disconnected', () => {
+  const wasConnected = statsApiConnected;
+  statsApiConnected = false;
+  if (!isTracking || !wasConnected) return;
+  pollGeneration++;
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+  cancelFastPoll();
+  pollImmediatelyAfterCurrent = false;
+  sendLog('⚠ Rocket League desconectado. Consultas pausadas.', 'warn');
+});
+rlStatsApi.on('error', err => { if (err.code !== 'ECONNREFUSED' && err.code !== 'ECONNRESET') sendLog(`Stats API: ${err.message}`, 'warn'); });
 rlStatsApi.on('*', onStatsApiEvent);

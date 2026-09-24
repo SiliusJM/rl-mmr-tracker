@@ -69,7 +69,7 @@ function page(body, css, script) {
     ${css}
   </style>
 </head>
-<body>${body}<script>${script}
+  <body>${body}<script>window.orderCasualLast = window.orderCasualLast || function(list){return (Array.isArray(list)?list:[]).slice().sort((a,b)=>Number(/casual/i.test(String(a?.name||'')))-Number(/casual/i.test(String(b?.name||''))));};${script}
 // Shared overlay bootstrap: render immediately, then refresh only on tracker changes.
 (function(){
   window.esc = window.esc || function(value){return String(value ?? '')
@@ -111,19 +111,19 @@ const SESSION_VARIANTS = [
 ];
 
 const CARD_VARIANTS = [
-  ['classic', 'Classic', 475, 420],
+  ['classic', 'Classic', 475, 500],
   ['broadcast', 'Broadcast', 730, 156],
   ['compact', 'Compact', 650, 110],
   ['rankline', 'Rank line', 835, 172],
-  ['neon', 'Neon', 420, 330],
+  ['neon', 'Neon', 420, 390],
   ['minimal', 'Minimal', 662, 130],
   ['split', 'Split', 795, 180],
-  ['tall', 'Tall', 355, 305],
+  ['tall', 'Tall', 355, 350],
 ];
 
 const ALL_VARIANTS = [
   ['cards', 'Cards', 375, 375],
-  ['compact', 'Compact row', 675, 395],
+  ['compact', 'Compact row', 675, 295],
 ];
 
 const SEASONS = [
@@ -134,40 +134,52 @@ const SEASONS = [
 
 function previewMarkup(kind, title, subtitle, width, height) {
   if (kind.startsWith('session-')) {
-    const label = kind === 'session-compact' || kind === 'session-minimal' ? ['WIN', 'LOSS'] : ['WINS', 'LOSSES'];
-    return `<div class="preview preview-session preview-session-${esc(kind)}">
+    const variant = kind.slice('session-'.length);
+    const label = ['compact', 'pills', 'minimal'].includes(variant) ? ['WIN', 'LOSS'] : ['WINS', 'LOSSES'];
+    const heading = ['classic', 'scoreboard', 'stacked', 'neon', 'wide'].includes(variant)
+      ? '<div class="session-art-heading">Match record</div>'
+      : '';
+    const divider = variant === 'pills' ? '' : '<div class="pv-divider"></div>';
+    return `<div class="preview preview-session preview-session-${esc(variant)}">
       <div class="preview-chip">Preview</div>
-      <div class="preview-title">${esc(title)}</div>
-      <div class="preview-session-row">
-        <div class="pv-stat win"><b>4</b><span>${label[0]}</span></div>
-        <div class="pv-divider"></div>
-        <div class="pv-stat loss"><b>2</b><span>${label[1]}</span></div>
+      <div class="session-art session-art-${esc(variant)}">
+        ${heading}
+        <div class="preview-session-row">
+          <div class="pv-stat win"><b>4</b><span>${label[0]}</span></div>
+          ${divider}
+          <div class="pv-stat loss"><b>2</b><span>${label[1]}</span></div>
+        </div>
       </div>
       <div class="preview-foot">${width} x ${height}</div>
     </div>`;
   }
 
   if (kind.startsWith('card-')) {
-    const large = kind === 'card-broadcast' || kind === 'card-split';
-    const mmr = kind === 'card-minimal' ? 'MMR' : '1056';
-    const icon = latestData.modes.find(m => m && m.iconUrl) || null;
-    const iconMarkup = icon ? `<img class="${large ? 'pv-icon large' : 'pv-icon'}" src="${esc(icon.iconUrl)}" alt="">` : `<div class="${large ? 'pv-icon large' : 'pv-icon'}"></div>`;
-    return `<div class="preview preview-card preview-card-${esc(kind)}">
-      ${iconMarkup}
-      <div class="preview-chip">Preview</div>
-      <div class="preview-title">${esc(title)}</div>
-      ${subtitle ? `<div class="preview-subtitle">${esc(subtitle)}</div>` : ''}
-      <div class="preview-mmr">${mmr}</div>
-    </div>`;
+    const variant = kind.slice('card-'.length);
+    const icon = '<div class="pv-icon">◆</div>';
+    const info = `<div class="pv-info"><div class="pv-mode">Ranked Doubles 2v2</div><div class="pv-rank">Champion I - Division I</div></div>`;
+    const verticalInfo = `<div class="pv-info"><div class="pv-rank">Champion I - Division I</div></div>`;
+    const mmr = `<div class="pv-mmr"><b>1056</b><span>+8 MMR</span></div>`;
+    let content;
+    if (variant === 'broadcast') content = `<div class="pv-broadcast-icon">${icon}</div>${info}${mmr}`;
+    else if (variant === 'split') content = `<div class="pv-split-icon">${icon}</div>${info}${mmr}`;
+    else if (variant === 'classic' || variant === 'neon' || variant === 'tall') content = `<div class="pv-category">RANKED</div><div class="pv-mode">Doubles 2v2</div>${icon}${verticalInfo}<div class="pv-mmr"><b>1056</b><span>+8 MMR</span></div>`;
+    else content = `${icon}${info}${mmr}`;
+    return `<div class="preview preview-card preview-card-${esc(variant)}"><div class="preview-chip">Preview</div><div class="card-art">${content}</div></div>`;
+  }
+
+  if (kind.startsWith('all-')) {
+    const compact = kind === 'all-compact';
+    const entries = [['2v2', 'C I · Div I', '1056'], ['3v3', 'C I · Div I', '1083'], ['Rumble', 'C I · Div IV', '1042']];
+    return `<div class="preview preview-all ${compact ? 'preview-all-compact' : 'preview-all-cards'}"><div class="preview-chip">Preview · ${esc(title)}</div><div class="all-art">${entries.map(([mode, rank, mmr]) => `<div class="all-entry"><i>◆</i><span>${mode}<small>${rank}</small></span><b>${mmr}</b></div>`).join('')}</div><div class="preview-foot">${width} x ${height}</div></div>`;
   }
 
   if (kind === 'profile') {
     return `<div class="preview preview-profile">
       <div class="preview-chip">Preview</div>
-      <div class="preview-title">${esc(title)}</div>
-      <div class="preview-profile-grid">
-        <span>GOLES</span><span>DISPAROS</span><span>VICTORIAS</span><span>ASISTENCIAS</span>
-      </div>
+      <div class="profile-art"><b>Career statistics</b><div class="preview-profile-grid">
+        <span>SHOTS <strong>1,284</strong></span><span>GOALS <strong>342</strong></span><span>SAVES <strong>216</strong></span><span>ASSISTS <strong>98</strong></span><span>MVPs <strong>44</strong></span><span>WINS <strong>510</strong></span>
+      </div><div class="profile-modes"><i>◆ 2v2 Champion I · 1056</i></div></div>
       <div class="preview-foot">${width} x ${height}</div>
     </div>`;
   }
@@ -267,6 +279,7 @@ function cardPageHtml() {
   const css = `
 .card{display:flex;position:relative;overflow:hidden;background:linear-gradient(135deg,rgba(20,23,46,.97),var(--bg));border:1px solid var(--line);box-shadow:0 10px 28px rgba(0,0,0,.28)}
 .mode{color:var(--muted);font-weight:900;font-size:10px;letter-spacing:1.1px;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mode-name{color:#f6f3ff;font-weight:850;font-size:18px;line-height:1.1;text-wrap:balance}
 .rank{font-weight:850;line-height:1.12;text-wrap:balance}
 .mmr{color:var(--purple);font-weight:950;line-height:.9;font-variant-numeric:tabular-nums}
 .label{font-size:9px;color:var(--muted);font-weight:900;letter-spacing:.8px;text-transform:uppercase}
@@ -286,6 +299,7 @@ function cardPageHtml() {
 .split{width:405px;height:158px;align-items:center;border-radius:14px}.split .iconwrap{align-self:stretch;display:flex;align-items:center;justify-content:center;width:138px;background:linear-gradient(135deg,rgba(124,58,237,.68),rgba(30,41,59,.2));border-right:1px solid var(--line)}.split .icon{width:100px;height:100px}.split .info{display:flex;min-width:0;flex:1;flex-direction:column;gap:6px;padding:17px}.split .rank{font-size:16px}.split .mmr{font-size:45px}
 .tall{width:270px;height:285px;align-items:center;flex-direction:column;gap:7px;padding:17px 19px;text-align:center;border-radius:16px}.tall .icon{width:106px;height:106px;margin-top:2px}.tall .rank{font-size:15px}.tall .mmr{font-size:47px}
 .classic{width:510px;height:495px;gap:12px;padding:28px 30px}.classic .icon{width:165px;height:165px}.classic .mode{font-size:13px}.classic .rank{font-size:25px}.classic .mmr{font-size:76px}.classic .label{font-size:12px}
+.classic .mode-name,.neon .mode-name{font-size:24px}.tall .mode-name{font-size:20px}.broadcast .mode-name,.rankline .mode-name{font-size:18px}.compact .mode-name,.minimal .mode-name,.split .mode-name{font-size:16px}
 .broadcast{width:648px;height:156px}.broadcast .iconwrap{width:151px;padding:10px}.broadcast .icon{width:99px;height:99px}.broadcast .info{padding-left:20px}.broadcast .mode{font-size:12px}.broadcast .rank{font-size:22px}.broadcast .mmr{font-size:56px}
 .compact{width:556px;height:211px;padding:14px 20px}.compact .icon{width:90px;height:90px}.compact .rank{font-size:17px}.compact .mmr{font-size:40px}
 .rankline{width:675px;height:168px;padding:10px 16px;gap:10px}.rankline .icon{width:117px;height:117px}.rankline .rank{font-size:20px}.rankline .mmr{font-size:53px}
@@ -301,7 +315,7 @@ function cardPageHtml() {
 .tall{height:420px;gap:7px;padding:16px 22px}.tall .icon{width:125px;height:125px}.tall .rank{font-size:19px}
 .card .label{font-size:20px}.compact .delta{font-size:17px;font-weight:900;letter-spacing:.4px;white-space:nowrap}.rankline .delta,.broadcast .delta{font-size:21px;font-weight:900;letter-spacing:.4px;white-space:nowrap}.classic .delta{font-size:30px;font-weight:900;letter-spacing:.4px;white-space:nowrap}
 .card .rank{overflow-wrap:anywhere;white-space:normal}
-.card.classic{width:475px;height:420px;gap:12px;padding:28px 30px}.card.classic .mode{font-size:20px}.neon{width:420px;height:330px;gap:9px;padding:22px 28px}.card.rankline{width:835px;height:172px;padding:10px 16px;gap:10px}.rankline .mode{font-size:20px}.compact{width:650px;height:110px;padding:14px 20px}.card.minimal{width:662px;height:130px;padding:14px 20px;gap:12px}.minimal .icon{width:140px;height:140px}.minimal .mode{font-size:20px}.minimal .delta{font-size:15px}.minimal .mmr{font-size:34px}.minimal .rank{font-size:22px}.broadcast{width:730px;height:156px}.broadcast .mode{font-size:22px}.broadcast .rank{font-size:25px}.neon .mode{font-size:20px}.neon .rank{font-size:22px}.card.split{width:795px;height:180px}.neon .delta,.split .delta{font-size:21px;font-weight:900;letter-spacing:.4px;white-space:nowrap}.card.tall{width:355px;height:305px}.card.tall .delta{font-size:22px;font-weight:900;letter-spacing:.4px;white-space:nowrap}.card.tall .mode{font-size:15px}
+.card.classic{width:475px;height:500px;gap:12px;padding:28px 30px}.card.classic .mode{font-size:20px}.card.neon{width:420px;height:390px;gap:9px;padding:22px 28px}.card.rankline{width:835px;height:172px;padding:10px 16px;gap:10px}.rankline .mode{font-size:20px}.compact{width:650px;height:110px;padding:14px 20px}.card.minimal{width:662px;height:130px;padding:14px 20px;gap:12px}.minimal .icon{width:140px;height:140px}.minimal .mode{font-size:20px}.minimal .delta{font-size:15px}.minimal .mmr{font-size:34px}.minimal .rank{font-size:22px}.broadcast{width:730px;height:156px}.broadcast .mode{font-size:22px}.broadcast .rank{font-size:25px}.neon .mode{font-size:20px}.neon .rank{font-size:22px}.card.split{width:795px;height:180px}.neon .delta,.split .delta{font-size:21px;font-weight:900;letter-spacing:.4px;white-space:nowrap}.card.tall{width:355px;height:350px}.card.tall .delta{font-size:22px;font-weight:900;letter-spacing:.4px;white-space:nowrap}.card.tall .mode{font-size:15px}
 `.trim();
 
   const script = `
@@ -310,7 +324,7 @@ const variant = ${JSON.stringify(CARD_VARIANTS.map(v => v[0]))}.includes(q.get('
 const modeId = q.get('mode');
 const season = q.get('season') || 'current';
 const seasonName = { prev1: 'PREVIOUS SEASON', prev2: '2 SEASONS AGO' };
-function rankHtml(value){ return String(value || 'Unranked').split(/\s+-\s+/).map(esc).join('<br>'); }
+function rankHtml(value){ return String(value || 'Unranked').split(/\\s+-\\s+/).map(esc).join('<br>'); }
 function delta(m){
   if (m.mmrDelta == null || !Number.isFinite(Number(m.mmrDelta))) return '<div class="label">MMR</div>';
   const n = Number(m.mmrDelta);
@@ -323,7 +337,7 @@ function render(d){
     document.getElementById('overlay').innerHTML = '<div class="empty">Season disabled in tracker settings.</div>';
     return;
   }
-  const list = season === 'prev1' ? d.prevSeason1 : season === 'prev2' ? d.prevSeason2 : d.modes;
+  const list = orderCasualLast(season === 'prev1' ? d.prevSeason1 : season === 'prev2' ? d.prevSeason2 : d.modes);
   const m = Array.isArray(list) && list.find(x => String(x.id) === String(modeId));
   const root = document.getElementById('overlay');
   if (!m) {
@@ -332,6 +346,11 @@ function render(d){
   }
   const icon = m.iconUrl ? '<div class="iconwrap"><img class="icon" src="' + esc(m.iconUrl) + '" alt=""></div>' : '';
   const tag = seasonName[season] ? '<div class="season">' + seasonName[season] + '</div>' : '';
+  const rawModeName = String(m.name || '');
+  const firstSpace = rawModeName.indexOf(' ');
+  const modePrefix = (firstSpace < 0 ? rawModeName : rawModeName.slice(0, firstSpace)).toLowerCase();
+  const modeName = ['ranked', 'casual'].includes(modePrefix) ? rawModeName.slice(firstSpace + 1) : rawModeName;
+  const modeCategory = modePrefix === 'casual' ? 'CASUAL' : 'RANKED';
   const info = '<div class="info"><div class="mode">' + esc(m.name) + '</div>' + tag + '<div class="rank">' + rankHtml(m.rank) + '</div></div>';
   const mmr = '<div class="mmrbox"><div class="mmr">' + esc(m.mmr) + '</div>' + delta(m) + '</div>';
   if (variant === 'broadcast') {
@@ -343,7 +362,7 @@ function render(d){
     return;
   }
   if (['classic','neon','tall'].includes(variant)) {
-    root.innerHTML = '<article class="card ' + variant + '"><span class="bar"></span><div class="mode">' + esc(m.name) + '</div>' + tag + (m.iconUrl ? '<img class="icon" src="' + esc(m.iconUrl) + '" alt="">' : '') + '<div class="rank">' + rankHtml(m.rank) + '</div>' + mmr + '</article>';
+    root.innerHTML = '<article class="card ' + variant + '"><span class="bar"></span><div class="mode">' + modeCategory + '</div><div class="mode-name">' + esc(modeName) + '</div>' + tag + (m.iconUrl ? '<img class="icon" src="' + esc(m.iconUrl) + '" alt="">' : '') + '<div class="rank">' + rankHtml(m.rank) + '</div>' + mmr + '</article>';
     return;
   }
   root.innerHTML = '<article class="card ' + variant + '"><span class="bar"></span>' + (m.iconUrl ? '<img class="icon" src="' + esc(m.iconUrl) + '" alt="">' : '') + info + mmr + '</article>';
@@ -358,12 +377,12 @@ function allPageHtml() {
 .card{width:250px;min-height:250px;display:flex;align-items:center;flex-direction:column;text-align:center;gap:6px;padding:16px;background:linear-gradient(135deg,rgba(20,23,46,.97),var(--bg));border:1px solid var(--line);border-radius:14px}
 .all.compact .card{width:180px;min-height:105px;flex-direction:row;padding:10px;text-align:left}
 .icon{width:88px;height:88px;object-fit:contain;filter:drop-shadow(0 0 10px rgba(167,139,250,.45))}
-.all.compact .icon{width:60px;height:60px}.all:not(.compact) .card{width:375px;min-height:375px;justify-content:center;gap:4px;padding:12px}.all.compact .card{width:675px;min-height:395px;gap:6px;padding:12px}.all.compact .icon{width:120px;height:120px}.all.compact .mode{font-size:16px}.all.compact .rank{font-size:18px}.all.compact .mmr{font-size:41px}.all:not(.compact) .icon{width:132px;height:132px}.all:not(.compact) .mode{font-size:15px}.all:not(.compact) .rank{font-size:22px}.all:not(.compact) .mmr{font-size:60px}
+.all.compact .icon{width:60px;height:60px}.all:not(.compact) .card{width:375px;min-height:375px;justify-content:center;gap:4px;padding:12px}.all.compact .card{width:675px;min-height:295px;gap:6px;padding:12px}.all.compact .icon{width:120px;height:120px}.all.compact .mode{font-size:16px}.all.compact .rank{font-size:18px}.all.compact .mmr{font-size:41px}.all:not(.compact) .icon{width:132px;height:132px}.all:not(.compact) .mode{font-size:15px}.all:not(.compact) .rank{font-size:22px}.all:not(.compact) .mmr{font-size:60px}
 .mode{color:var(--muted);font-size:10px;font-weight:900;letter-spacing:1px;text-transform:uppercase}
 .rank{font-size:15px;font-weight:850;line-height:1.15}
 .mmr{color:var(--purple);font-size:40px;font-weight:950;line-height:1;font-variant-numeric:tabular-nums}
 .all.compact .rank{font-size:12px}.all.compact .mmr{font-size:27px}
-.all.compact .card{width:675px;min-height:395px;gap:6px;padding:12px}.all.compact .icon{width:160px;height:160px}.all.compact .mode{font-size:22px}.all.compact .rank{font-size:24px}.all.compact .mmr{font-size:58px}.all.compact .label{font-size:13px}
+.all.compact .card{width:675px;min-height:295px;gap:6px;padding:12px}.all.compact .icon{width:160px;height:160px}.all.compact .mode{font-size:22px}.all.compact .rank{font-size:24px}.all.compact .mmr{font-size:58px}.all.compact .label{font-size:13px}
 .all .label{font-size:20px}
 .info{display:flex;flex-direction:column;gap:4px}.label{font-size:9px;color:var(--muted);font-weight:900;letter-spacing:.8px}.empty{margin:0}
 .preview{position:relative;height:128px;overflow:hidden;border-radius:7px;background:linear-gradient(135deg,#0f1326,#080a14);border:1px solid rgba(167,139,250,.24);display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;padding:10px;text-align:center}
@@ -383,13 +402,13 @@ const q = new URLSearchParams(location.search);
 const season = q.get('season') || 'current';
 const variant = q.get('variant') === 'compact' ? 'compact' : 'cards';
 const explicit = q.get('modes') ? q.get('modes').split(',') : null;
-function rankHtml(value){ return String(value || 'Unranked').split(/\s+-\s+/).map(esc).join('<br>'); }
+function rankHtml(value){ return String(value || 'Unranked').split(/\\s+-\\s+/).map(esc).join('<br>'); }
 function render(d){
   if ((season === 'prev1' && d.showPrevSeason1 === false) || (season === 'prev2' && d.showPrevSeason2 !== true)) {
     document.getElementById('overlay').innerHTML = '<div class="empty">Season disabled in tracker settings.</div>';
     return;
   }
-  const source = season === 'prev1' ? d.prevSeason1 : season === 'prev2' ? d.prevSeason2 : d.modes;
+  const source = orderCasualLast(season === 'prev1' ? d.prevSeason1 : season === 'prev2' ? d.prevSeason2 : d.modes);
   const selected = explicit || (d.selectedModeIds || []).map(String);
   const modes = Array.isArray(source) ? source.filter(m => selected.includes(String(m.id))) : [];
   const root = document.getElementById('overlay');
@@ -423,7 +442,7 @@ function stat(label,value){return '<div class="stat"><b>'+esc(value||0)+'</b><sp
 function render(d){
   const root = document.getElementById('overlay');
   const c = d.careerStats || {};
-  const modes = (d.modes || []).filter(m => (d.selectedModeIds || []).some(id => String(id) === String(m.id)));
+  const modes = orderCasualLast(d.modes).filter(m => (d.selectedModeIds || []).some(id => String(id) === String(m.id)));
   const ranked = modes.filter(m => m.peakRank || m.peakRating);
   const highest = ranked.slice().sort((a,b)=>(Number(b.peakRating)||0)-(Number(a.peakRating)||0))[0] || modes[0] || {};
   root.innerHTML = '<section class="section"><div class="title">📈 Estadísticas de carrera</div><div class="stats">' +
@@ -448,7 +467,7 @@ function indexPageHtml(port) {
     (seasonInfo[0] === 'prev1' ? latestData.showPrevSeason1 !== false : latestData.showPrevSeason2 === true));
   const selectedCards = visibleSeasons.flatMap(seasonInfo =>
     ALL_VARIANTS.map(v =>
-      overlayCard(port, `/obs/all?season=${seasonInfo[0]}&variant=${v[0]}`, `${seasonInfo[1]} - ${v[1]}`, v[2], v[3], '', `card-${v[0]}`, seasonInfo[2])
+      overlayCard(port, `/obs/all?season=${seasonInfo[0]}&variant=${v[0]}`, `${seasonInfo[1]} - ${v[1]}`, v[2], v[3], '', `all-${v[0]}`, seasonInfo[2])
     )
   ).join('');
 
@@ -493,8 +512,16 @@ function indexPageHtml(port) {
     .preview-card .preview-mmr{margin-top:auto;font-size:16px;font-weight:950;color:#c4b5fd;line-height:1}
     .preview-card .preview-title{font-size:11px;white-space:normal;line-height:1.1}
     .preview-card .preview-subtitle{max-width:100%;line-height:1.15}
-.preview-card .pv-icon{width:34px;height:34px;border-radius:50%;clip-path:polygon(50% 0,88% 25%,100% 68%,50% 100%,0 68%,12% 25%)}.preview-card .pv-icon.large{width:38px;height:38px}.preview-card .preview-title{font-size:10px;line-height:1.1;max-height:24px}.preview-card .preview-subtitle{font-size:9px;line-height:1.1;max-height:20px}.preview-card .preview-foot{font-size:9px}
-    .preview-card .pv-icon{width:34px;height:34px;border-radius:50%;clip-path:polygon(50% 0,88% 25%,100% 68%,50% 100%,0 68%,12% 25%)}.preview-card .pv-icon.large{width:38px;height:38px}.preview-card .preview-title{font-size:10px;line-height:1.1;max-height:24px}.preview-card .preview-subtitle{font-size:9px;line-height:1.1;max-height:20px}.preview-card .preview-foot{font-size:9px}
+    .preview-card .preview-foot{font-size:9px}
+    .card-art{display:flex;position:relative;width:100%;height:82px;min-width:0;align-items:center;gap:7px;padding:7px;border:1px solid rgba(167,139,250,.28);border-radius:8px;background:linear-gradient(135deg,#15172e,#080a14);overflow:hidden;text-align:left}
+    .pv-icon{display:flex;flex:none;width:29px;height:29px;align-items:center;justify-content:center;color:#e9d5ff;font-size:23px;text-shadow:0 0 8px #a78bfa}
+    .pv-info{display:flex;min-width:0;flex:1;flex-direction:column;gap:3px}.pv-mode{color:#a5acc9;font-size:7px;font-weight:900;letter-spacing:.6px;text-transform:uppercase}.pv-rank{color:#f6f3ff;font-size:9px;font-weight:850;line-height:1.05}
+    .pv-mmr{display:flex;flex:none;flex-direction:column;align-items:flex-end;gap:2px;color:#c4b5fd}.pv-mmr b{font-size:17px;line-height:1}.pv-mmr span{color:#34d399;font-size:7px;font-weight:900;white-space:nowrap}
+    .preview-card-classic .card-art,.preview-card-neon .card-art,.preview-card-tall .card-art{height:82px;flex-direction:column;justify-content:center;gap:2px;text-align:center}.preview-card-classic .pv-icon,.preview-card-neon .pv-icon,.preview-card-tall .pv-icon{height:30px}.preview-card-classic .pv-info,.preview-card-neon .pv-info,.preview-card-tall .pv-info{align-items:center}.preview-card-classic .pv-mmr,.preview-card-neon .pv-mmr,.preview-card-tall .pv-mmr{align-items:center}.preview-card-neon .card-art{border-color:#c4b5fd;box-shadow:0 0 13px rgba(139,92,246,.4),inset 0 0 12px rgba(139,92,246,.12)}
+    .preview-card-broadcast .card-art{background:linear-gradient(90deg,rgba(167,36,148,.7) 0 24%,#090c14 24%)}.pv-broadcast-icon,.pv-split-icon{display:flex;align-self:stretch;align-items:center;justify-content:center;flex:none;width:24%;margin:-7px 0 -7px -7px;background:rgba(124,58,237,.32)}.pv-split-icon{background:linear-gradient(135deg,#7c3aed,#1e293b);border-right:1px solid #4c3f96}.preview-card-split .card-art{padding-left:0}.preview-card-minimal .card-art{gap:4px}.preview-card-minimal .pv-mode{font-size:5px}.preview-card-minimal .pv-rank{font-size:7px}.preview-card-minimal .pv-mmr b{font-size:19px}
+    .preview-session{justify-content:center}.session-art{display:flex;width:100%;height:88px;align-items:center;justify-content:center;gap:8px;padding:7px;border:1px solid rgba(167,139,250,.28);border-radius:9px;background:linear-gradient(135deg,#15172e,#080a14)}.session-art-heading{color:#c7d2fe;font-size:8px;font-weight:900;letter-spacing:.6px;text-transform:uppercase}.preview-session-row{display:flex;align-items:center;justify-content:space-around;gap:7px;width:100%;max-width:175px}.pv-stat{display:flex;flex:1;flex-direction:column;align-items:center;gap:2px}.pv-stat b{font-size:23px;line-height:1}.pv-stat span{font-size:7px;font-weight:900;letter-spacing:.5px}.pv-stat.win b,.pv-stat.win span{color:#34d399}.pv-stat.loss b,.pv-stat.loss span{color:#fb7185}.pv-divider{height:27px;width:1px;background:rgba(167,139,250,.4)}
+    .preview-session-classic .session-art{width:120px;flex-direction:column}.preview-session-scoreboard .session-art{justify-content:space-between}.preview-session-scoreboard .preview-session-row{max-width:120px}.preview-session-compact .session-art{height:56px}.preview-session-compact .pv-stat b{font-size:17px}.preview-session-pills .pv-stat{padding:6px 2px;border-radius:999px;background:rgba(255,255,255,.06)}.preview-session-stacked .session-art{width:115px;flex-direction:column}.preview-session-stacked .preview-session-row{flex-direction:column;gap:3px}.preview-session-stacked .pv-divider{display:none}.preview-session-stacked .pv-stat{flex-direction:row;justify-content:space-around;padding:3px 6px;border-radius:5px;background:rgba(255,255,255,.05)}.preview-session-neon .session-art{border-color:#c4b5fd;box-shadow:0 0 14px rgba(139,92,246,.36),inset 0 0 12px rgba(139,92,246,.12)}.preview-session-minimal .session-art{height:55px;border:0;background:transparent}.preview-session-minimal .pv-stat b{font-size:29px}.preview-session-wide .session-art{height:57px}.preview-all .all-art{display:flex;width:100%;height:81px;align-items:center;justify-content:center;gap:4px}.all-entry{display:flex;min-width:0;flex:1;flex-direction:column;align-items:center;gap:2px;padding:4px;border:1px solid rgba(167,139,250,.25);border-radius:5px;background:#111428}.all-entry i{color:#c4b5fd;font-size:13px;font-style:normal}.all-entry span{font-size:7px;color:#a5acc9;text-align:center}.all-entry small{display:block;color:#f6f3ff;font-size:6px}.all-entry b{color:#c4b5fd;font-size:11px}.preview-all-compact .all-art{flex-direction:row;align-items:center;gap:3px}.preview-all-compact .all-entry{flex-direction:row;justify-content:center;gap:2px;padding:5px 3px}.preview-all-compact .all-entry i{font-size:8px}.preview-all-compact .all-entry span{flex:1;text-align:left;font-size:5px}.preview-all-compact .all-entry small{display:none}.preview-all-compact .all-entry b{font-size:7px}
+    .profile-art{display:flex;width:100%;flex-direction:column;gap:4px;padding:6px;border:1px solid rgba(167,139,250,.28);border-radius:7px;background:linear-gradient(135deg,#15172e,#080a14)}.profile-art>b{color:#c4b5fd;font-size:8px;text-transform:uppercase}.preview-profile-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;width:100%}.preview-profile-grid span{padding:3px;border-radius:4px;background:rgba(255,255,255,.05);color:#a5acc9;font-size:6px}.preview-profile-grid strong{display:block;color:#f6f3ff;font-size:8px}.profile-modes{display:flex;gap:3px}.profile-modes i{overflow:hidden;flex:1;padding:3px;border-radius:3px;background:rgba(255,255,255,.05);color:#c4b5fd;font-size:5px;font-style:normal;white-space:nowrap}
     .preview-card-broadcast{flex-direction:row;align-items:center;gap:10px;padding:10px 12px;text-align:left;background:linear-gradient(90deg,rgba(167,36,148,.22) 0,rgba(9,12,20,.88) 28%)}
     .preview-card-broadcast .preview-title{font-size:10px}.preview-card-broadcast .preview-mmr{font-size:20px}.preview-card-broadcast .pv-icon{width:34px;height:34px}
     .preview-card-compact{gap:4px}.preview-card-compact .preview-mmr{font-size:14px}
@@ -504,6 +531,26 @@ function indexPageHtml(port) {
     .preview-card-tall{justify-content:space-between;padding:14px 12px}.preview-card-tall .preview-title{white-space:normal}
     .preview-profile{justify-content:space-between;align-items:flex-start;text-align:left;padding:12px 14px}
     .preview-profile-grid{flex-wrap:wrap;width:100%;gap:6px}.preview-profile-grid span{flex:1 1 calc(50% - 6px);min-width:0;border-radius:8px;background:rgba(255,255,255,.05);padding:5px 6px;font-size:9px;color:#c4b5fd;font-weight:900;letter-spacing:.7px;text-transform:uppercase}
+    .preview.preview-session,.preview.preview-card,.preview.preview-all,.preview.preview-profile{height:128px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:2px;padding:7px 10px;text-align:center;background:linear-gradient(135deg,#0f1326,#080a14)}
+    .preview.preview-profile{height:122px}.preview.preview-session>.preview-chip,.preview.preview-card>.preview-chip,.preview.preview-all>.preview-chip,.preview.preview-profile>.preview-chip{align-self:center;flex:none}
+    .preview.preview-session>.preview-foot,.preview.preview-card>.preview-foot,.preview.preview-all>.preview-foot,.preview.preview-profile>.preview-foot{align-self:center;flex:none}
+    .preview-session .session-art{height:68px;max-height:68px;min-height:0;flex:none;align-self:center}.preview-card .card-art{height:88px;max-height:88px;min-height:0;flex:none;align-self:center}.preview-all .all-art{height:68px;max-height:68px;min-height:0;flex:none;align-self:center}
+    .preview-profile .profile-art{min-height:0;flex:1;justify-content:center;overflow:hidden;padding:4px;gap:3px}.preview-profile-grid{gap:2px}.preview-profile-grid span{padding:2px;font-size:5px;line-height:1}.preview-profile-grid strong{font-size:7px;line-height:1}.profile-modes i{padding:2px;line-height:1}
+    .pv-category{color:#c4b5fd;font-size:6px;font-weight:950;letter-spacing:.55px;line-height:1;text-transform:uppercase}
+    .preview-session .session-art{box-sizing:border-box;width:100%;height:68px;max-height:68px;min-height:0;display:flex;flex:none;align-items:center;justify-content:center;gap:6px;padding:5px 8px;border:1px solid rgba(167,139,250,.3);border-radius:7px;background:linear-gradient(135deg,#15172e,#080a14);overflow:hidden}
+    .preview-session .session-art-heading{flex:none;width:auto;color:#c7d2fe;font-size:6px;font-weight:900;letter-spacing:.35px;line-height:1.05;text-transform:uppercase;text-align:center;white-space:normal}
+    .preview-session .preview-session-row{display:flex;flex:1;min-width:0;min-height:0;align-items:center;justify-content:space-around;gap:4px;width:100%;max-width:none}
+    .preview-session .pv-stat{display:flex;flex:1;min-width:0;align-items:center;justify-content:center;flex-direction:column;gap:1px}
+    .preview-session .pv-stat b{font-size:19px;line-height:.9}.preview-session .pv-stat span{font-size:6px;font-weight:900;letter-spacing:.2px;line-height:1}
+    .preview-session .pv-divider{width:1px;height:23px;flex:none;border:0;border-radius:0;background:rgba(167,139,250,.55);opacity:1}
+    .preview-session-classic .session-art{width:112px;flex-direction:column;gap:3px;padding:4px 8px}.preview-session-classic .session-art-heading{font-size:6px}.preview-session-classic .pv-stat b{font-size:22px}.preview-session-classic .pv-stat span{font-size:7px}
+    .preview-session-scoreboard .session-art{width:190px;flex-direction:row;justify-content:space-between;gap:7px;padding:6px 9px}.preview-session-scoreboard .session-art-heading{width:43px;text-align:left}.preview-session-scoreboard .preview-session-row{gap:6px}.preview-session-scoreboard .pv-stat b{font-size:19px}.preview-session-scoreboard .pv-divider{height:27px}
+    .preview-session-compact .session-art{width:120px;height:55px;gap:5px;padding:4px 8px}.preview-session-compact .pv-stat b{font-size:19px}.preview-session-compact .pv-stat span{font-size:11px;letter-spacing:.35px}.preview-session-compact .pv-divider{height:31px}
+    .preview-session-pills .session-art{width:230px;height:56px;gap:0;padding:0;border:0;border-radius:999px;background:transparent}.preview-session-pills .preview-session-row{height:100%;gap:7px}.preview-session-pills .pv-stat{height:100%;padding:4px 3px;border:1px solid rgba(167,139,250,.28);border-radius:999px;background:rgba(255,255,255,.055)}.preview-session-pills .pv-stat b{font-size:19px}.preview-session-pills .pv-stat span{font-size:8px}.preview-session-pills .pv-divider{display:none}
+    .preview-session-stacked .session-art{width:146px;flex-direction:column;justify-content:center;gap:3px;padding:4px 8px}.preview-session-stacked .session-art-heading{font-size:6px}.preview-session-stacked .preview-session-row{flex-direction:row;gap:5px}.preview-session-stacked .pv-stat{width:auto;padding:0;border-radius:0;background:transparent;flex-direction:column}.preview-session-stacked .pv-stat b{font-size:19px}.preview-session-stacked .pv-stat span{font-size:7px}.preview-session-stacked .pv-divider{display:block;height:22px}
+    .preview-session-neon .session-art{width:186px;flex-direction:row;justify-content:space-between;gap:6px;padding:5px 9px;border-color:#c4b5fd;box-shadow:0 0 10px rgba(139,92,246,.36),inset 0 0 9px rgba(139,92,246,.12)}.preview-session-neon .session-art-heading{width:44px;text-align:left;line-height:1.1}.preview-session-neon .preview-session-row{gap:5px}.preview-session-neon .pv-stat b{font-size:21px}.preview-session-neon .pv-stat span{font-size:8px}.preview-session-neon .pv-divider{height:27px}
+    .preview-session-minimal .session-art{width:235px;height:55px;padding:2px 7px;border:0;background:transparent}.preview-session-minimal .preview-session-row{gap:8px}.preview-session-minimal .pv-stat b{font-size:23px}.preview-session-minimal .pv-stat span{font-size:11px;letter-spacing:.3px}.preview-session-minimal .pv-divider{height:25px}
+    .preview-session-wide .session-art{width:200px;height:56px;flex-direction:row;justify-content:space-between;gap:8px;padding:5px 9px}.preview-session-wide .session-art-heading{width:80px;text-align:left}.preview-session-wide .preview-session-row{gap:9px}.preview-session-wide .pv-stat b{font-size:20px}.preview-session-wide .pv-stat span{font-size:7px}.preview-session-wide .pv-divider{height:27px}
     .name{font-weight:850;color:#f6f3ff}.size{font-size:11px;color:#a5acc9}.url{color:#5eead4;font:11px Consolas,monospace;word-break:break-all;line-height:1.35}.copy{align-self:flex-start;margin-top:auto;padding:6px 9px;border:1px solid #3e4777;border-radius:6px;background:#202746;color:#eef;cursor:pointer;font-size:11px}.copy:hover{border-color:#a78bfa}
     .live-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;margin-bottom:14px}.live-card{display:flex;flex-direction:column;gap:4px;min-height:126px;padding:12px;background:#151a30;border:1px solid #4c3f96;border-radius:10px;text-decoration:none;color:inherit}.live-card:hover{border-color:#c4b5fd;transform:translateY(-1px)}.live-card .mode{font-size:10px;color:#9da5c4}.live-card .rank{font-size:12px;color:#f6f3ff;line-height:1.15}.live-card .mmr{margin-top:auto;color:#b79cff;font-size:26px;font-weight:950;line-height:1}.live-card .mmr small{font-size:9px;color:#8e96b7;letter-spacing:.8px}.live-card .season{font-size:9px;color:#fcd34d;font-weight:900;text-transform:uppercase}.live-session{display:flex;align-items:center;gap:18px;padding:12px 16px;margin-bottom:14px;background:#151a30;border:1px solid #2d355e;border-radius:10px}.live-session b{font-size:25px}.live-session .win{color:#34d399}.live-session .loss{color:#fb7185}.live-session span{font-size:10px;color:#a5acc9;font-weight:900;text-transform:uppercase}.mode-block details{margin-bottom:9px;background:#11162a;border:1px solid #2d355e;border-radius:9px;overflow:hidden}.mode-block summary{cursor:pointer;padding:11px 13px;color:#f6f3ff;font-weight:850;list-style:none}.mode-block summary::-webkit-details-marker{display:none}.mode-block summary:before{content:'+';display:inline-block;width:18px;color:#a78bfa;font-size:17px}.mode-block details[open] summary:before{content:'−'}.mode-block .season-title{margin:0;padding:8px 13px 4px}.mode-block .grid{padding:0 10px 10px}
     .live-card .rank-icon{width:42px;height:42px;object-fit:contain;align-self:center;filter:drop-shadow(0 0 8px rgba(167,139,250,.45))}.live-card,.live-session{text-decoration:none}.collapsible{padding:0;overflow:hidden}.collapsible>summary{cursor:pointer;padding:0 0 10px;color:#d8d4ff;font-size:15px;font-weight:850;list-style:none}.collapsible>summary::-webkit-details-marker{display:none}.collapsible>summary:before{content:'+';display:inline-block;width:20px;color:#a78bfa;font-size:20px;vertical-align:-1px}.collapsible[open]>summary:before{content:'−'}.collapsible>p,.collapsible>.grid,.collapsible>#modes,.collapsible>div{margin-left:0;margin-right:0}.collapsible>p{margin-top:0}.collapsible>.grid{margin-bottom:18px}.live-session{max-width:430px;gap:12px;flex-wrap:wrap}.live-session span:first-child{width:100%}.season-summary{margin-top:10px}.season-summary .season-title{margin-top:0}
@@ -571,22 +618,22 @@ function indexPageHtml(port) {
     const rankIcons = ${JSON.stringify([...new Set((latestData.modes || []).map(m=>m && m.iconUrl).filter(Boolean))])};
     const sessionSection=document.getElementById('session-overlays'); if(sessionSection){sessionSection.removeAttribute('open');sessionSection.open=false;}
     function clean(s){return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+    function orderCasualLast(list){return (Array.isArray(list)?list:[]).slice().sort((a,b)=>Number(/casual/i.test(String(a?.name||'')))-Number(/casual/i.test(String(b?.name||''))));}
     function copy(url,b){navigator.clipboard?.writeText(url).then(()=>{b.textContent='Copied';setTimeout(()=>b.textContent='Copy URL',1100)}).catch(()=>prompt('Copy this URL:',url));}
     function previewMarkup(kind,title,subtitle,w,h){
-      if(kind.startsWith('session-')) return '<div class="preview preview-session preview-session-'+clean(kind)+'"><div class="preview-chip">Preview</div><div class="preview-title">'+clean(title)+'</div><div class="preview-session-row"><div class="pv-stat win"><b>4</b><span>'+(kind==='session-compact'||kind==='session-minimal'?'WIN':'WINS')+'</span></div><div class="pv-divider"></div><div class="pv-stat loss"><b>2</b><span>'+(kind==='session-compact'||kind==='session-minimal'?'LOSS':'LOSSES')+'</span></div></div><div class="preview-foot">'+w+' x '+h+'</div></div>';
+      if(kind.startsWith('session-')){const variant=kind.slice(8),compact=['compact','pills','minimal'].includes(variant),labels=compact?['WIN','LOSS']:['WINS','LOSSES'],heading=['classic','scoreboard','stacked','neon','wide'].includes(variant)?'<div class="session-art-heading">Match record</div>':'',divider=variant==='pills'?'':'<div class="pv-divider"></div>';return '<div class="preview preview-session preview-session-'+clean(variant)+'"><div class="preview-chip">Preview</div><div class="session-art session-art-'+clean(variant)+'">'+heading+'<div class="preview-session-row"><div class="pv-stat win"><b>4</b><span>'+labels[0]+'</span></div>'+divider+'<div class="pv-stat loss"><b>2</b><span>'+labels[1]+'</span></div></div></div><div class="preview-foot">'+w+' x '+h+'</div></div>';}
       if(kind.startsWith('card-')){
-        const iconClass=(kind==='card-broadcast'||kind==='card-split')?'pv-icon large':'pv-icon';
-        const sub=subtitle?'<div class="preview-subtitle">'+clean(subtitle)+'</div>':'';
-        const mmr=kind==='card-minimal'?'MMR':'1056';
-        const icon=rankIcons.length?'<img class="'+iconClass+'" src="'+clean(rankIcons[Math.floor(Math.random()*rankIcons.length)])+'" alt="">':'<div class="'+iconClass+'"></div>';
-        return '<div class="preview preview-card preview-card-'+clean(kind)+'">'+icon+'<div class="preview-chip">Preview</div><div class="preview-title">'+clean(title)+'</div>'+sub+'<div class="preview-mmr">'+mmr+'</div></div>';
+        const variant=kind.slice(5),icon=rankIcons.length?'<img class="pv-icon" src="'+clean(rankIcons[0])+'" alt="">':'<div class="pv-icon">◆</div>',info='<div class="pv-info"><div class="pv-mode">Ranked Doubles 2v2</div><div class="pv-rank">'+clean(subtitle||'Champion I - Division I')+'</div></div>',verticalInfo='<div class="pv-info"><div class="pv-rank">'+clean(subtitle||'Champion I - Division I')+'</div></div>',mmr='<div class="pv-mmr"><b>1056</b><span>+8 MMR</span></div>';
+        let content;if(variant==='broadcast')content='<div class="pv-broadcast-icon">'+icon+'</div>'+info+mmr;else if(variant==='split')content='<div class="pv-split-icon">'+icon+'</div>'+info+mmr;else if(['classic','neon','tall'].includes(variant))content='<div class="pv-category">RANKED</div><div class="pv-mode">Doubles 2v2</div>'+icon+verticalInfo+mmr;else content=icon+info+mmr;
+        return '<div class="preview preview-card preview-card-'+clean(variant)+'"><div class="preview-chip">Preview</div><div class="card-art">'+content+'</div></div>';
       }
-      if(kind==='profile') return '<div class="preview preview-profile"><div class="preview-chip">Preview</div><div class="preview-title">'+clean(title)+'</div><div class="preview-profile-grid"><span>GOLES</span><span>DISPAROS</span><span>VICTORIAS</span><span>ASISTENCIAS</span></div><div class="preview-foot">'+w+' x '+h+'</div></div>';
+      if(kind.startsWith('all-')){const compact=kind==='all-compact',entries=[['2v2','C I · Div I','1056'],['3v3','C I · Div I','1083'],['Rumble','C I · Div IV','1042']];return '<div class="preview preview-all '+(compact?'preview-all-compact':'preview-all-cards')+'"><div class="preview-chip">Preview · '+clean(title)+'</div><div class="all-art">'+entries.map(([mode,rank,mmr])=>'<div class="all-entry"><i>◆</i><span>'+mode+'<small>'+rank+'</small></span><b>'+mmr+'</b></div>').join('')+'</div><div class="preview-foot">'+w+' x '+h+'</div></div>';}
+      if(kind==='profile') return '<div class="preview preview-profile"><div class="preview-chip">Preview</div><div class="profile-art"><b>Career statistics</b><div class="preview-profile-grid"><span>SHOTS <strong>1,284</strong></span><span>GOALS <strong>342</strong></span><span>SAVES <strong>216</strong></span><span>ASSISTS <strong>98</strong></span><span>MVPs <strong>44</strong></span><span>WINS <strong>510</strong></span></div><div class="profile-modes"><i>◆ 2v2 Champion I · 1056</i></div></div><div class="preview-foot">'+w+' x '+h+'</div></div>';
       return '<div class="preview"><div class="preview-chip">Preview</div><div class="preview-title">'+clean(title)+'</div><div class="preview-bars"><span></span><span></span><span></span></div><div class="preview-foot">'+w+' x '+h+'</div></div>';
     }
     function card(path,name,w,h,kind,subtitle){const url='http://localhost:'+port+path;return '<article class="linkcard">'+previewMarkup(kind||'default',name,subtitle,w,h)+'<div class="name">'+clean(name)+'</div><div class="size">Recommended: '+w+' x '+h+' px</div><a class="url" href="'+clean(path)+'" target="_blank">'+clean(url)+'</a><button class="copy" data-url="'+clean(url)+'" onclick="copy(this.dataset.url,this)">Copy URL</button></article>';}
     function show(d){
-      const ids=(d.selectedModeIds||[]).map(String), current=Array.isArray(d.modes)?d.modes:[], selected=current.filter(m=>ids.includes(String(m.id))), modes=selected.length?selected:current;
+      const ids=(d.selectedModeIds||[]).map(String), current=orderCasualLast(d.modes), selected=current.filter(m=>ids.includes(String(m.id))), modes=selected.length?selected:current;
       const live=document.getElementById('live-dashboard'), root=document.getElementById('modes');
       const session=d.session||{wins:0,losses:0};
       if(!modes.length){live.innerHTML='<div class="empty-state">Esperando datos del tracker...</div>';root.innerHTML='<div class="empty-state">Esperando modos seleccionados...</div>';return;}
@@ -596,7 +643,7 @@ function indexPageHtml(port) {
       if(prev2Section) prev2Section.hidden=d.showPrevSeason2!==true;
       const activeIds=selected.length?ids:current.map(m=>String(m.id));
       const modeCard=m=>'<a class="live-card" href="#mode-'+clean(m.id)+'">'+(m.iconUrl?'<img class="rank-icon" src="'+clean(m.iconUrl)+'" alt="">':'')+'<div class="mode">'+clean(m.name)+'</div><div class="rank">'+clean(m.rank||'Unranked')+'</div><div class="mmr">'+clean(m.mmr||0)+' <small>MMR</small></div></a>';
-      enabled.filter(s=>s[0]!=='current').forEach(s=>{const source=s[0]==='prev1'?d.prevSeason1:d.prevSeason2;const rows=Array.isArray(source)?source.filter(m=>activeIds.includes(String(m.id))):[];const target=document.getElementById('season-'+s[0]);if(target) target.innerHTML=rows.length?'<div class="live-grid">'+rows.map(modeCard).join('')+'</div>':'<div class="empty-state">No hay datos disponibles para esta temporada.</div>';});
+      enabled.filter(s=>s[0]!=='current').forEach(s=>{const source=orderCasualLast(s[0]==='prev1'?d.prevSeason1:d.prevSeason2);const rows=source.filter(m=>activeIds.includes(String(m.id)));const target=document.getElementById('season-'+s[0]);if(target) target.innerHTML=rows.length?'<div class="live-grid">'+rows.map(modeCard).join('')+'</div>':'<div class="empty-state">No hay datos disponibles para esta temporada.</div>';});
       live.innerHTML='<div class="live-grid">'+modes.map(modeCard).join('')+'</div><a class="live-session" href="#session-overlays"><span>Partidas de hoy</span><b class="win">'+clean(session.wins||0)+'</b><span>Ganadas</span><b class="loss">'+clean(session.losses||0)+'</b><span>Perdidas</span></a>';
       root.innerHTML=modes.map(m=>'<div class="mode-block" id="mode-'+clean(m.id)+'"><details><summary>'+clean(m.name)+' · '+clean(m.rank||'Unranked')+' · '+clean(m.mmr||0)+' MMR</summary>'+enabled.map(s=>'<div class="season-title"><span>'+clean(s[1])+'</span><span class="tag">'+clean(s[2])+'</span></div><div class="grid">'+cardVariants.map(v=>card('/obs/card?mode='+encodeURIComponent(m.id)+'&season='+s[0]+'&variant='+v[0],v[1],v[2],v[3],'card-'+v[0],m.rank)).join('')+'</div>').join('')+'</details></div>').join('');
     }
