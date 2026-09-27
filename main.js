@@ -46,6 +46,24 @@ function withMmrChanges(modes, previousModes) {
   });
 }
 
+function preserveConfirmedMmr(modes, previousModes, allowChanges) {
+  if (allowChanges || !Array.isArray(previousModes)) return { modes, ignored: [] };
+
+  const previousById = new Map(previousModes.map(mode => [String(mode.id), mode]));
+  const ignored = [];
+  const stableModes = (Array.isArray(modes) ? modes : []).map(mode => {
+    const previous = previousById.get(String(mode.id));
+    const currentMmr = Number(mode.mmr);
+    const previousMmr = Number(previous?.mmr);
+    if (!previous || !Number.isFinite(currentMmr) || !Number.isFinite(previousMmr) || currentMmr === previousMmr) return mode;
+
+    ignored.push(`${mode.name || mode.id}: ${previousMmr} → ${currentMmr}`);
+    return { ...mode, mmr: previous.mmr, rank: previous.rank, iconUrl: previous.iconUrl };
+  });
+
+  return { modes: stableModes, ignored };
+}
+
 function buildResponse(modes, selectedIds, showRecord, session, careerStats, cfg) {
   const selected = modes.filter(m => selectedIds.includes(m.id));
   const format = cfg.twitchCommandFormat || 'modes';
@@ -137,6 +155,7 @@ let lastMatchEndAt = 0;
 let fastPollInProgress = false;
 let rlLocalTeamNum = null;
 let lastHandledMatchGuid = null;
+let hasLiveMmrBaseline = false;
 
 (function initLastDataFromCache() {
   const cached = loadModesCache();
@@ -283,6 +302,7 @@ ipcMain.handle('start-tracker', async () => {
   sendLog('Conexión con StreamElements verificada.', 'success');
   if (mainWin) mainWin.webContents.send('tracker-state', { running: true });
   resetPrevSeasonCache(); lastPublishedResponse = null; lastHandledMatchGuid = null; rlLocalTeamNum = null; cancelFastPoll();
+  hasLiveMmrBaseline = false;
   statsApiConnected = false;
   statsApiEverConnected = false;
   pollImmediatelyAfterCurrent = false;
@@ -315,7 +335,9 @@ async function poll(cfg, meta = {}) {
   try {
     const scraped = await scrapeProfile(cfg.platform, cfg.username);
     if (!isTracking || generation !== pollGeneration || !canAutoPoll()) return null;
-    const modes = withMmrChanges(scraped.modes, lastData?.modes);
+    const acceptedMmr = preserveConfirmedMmr(scraped.modes, lastData?.modes, isFast || !hasLiveMmrBaseline);
+    const modes = withMmrChanges(acceptedMmr.modes, lastData?.modes);
+    hasLiveMmrBaseline = true;
     const careerStats = scraped.careerStats;
     const sessionData = updateSession(modes);
     if (sessionData.events?.length) for (const ev of sessionData.events) sendLog(ev.msg, ev.type);
