@@ -185,6 +185,12 @@ El proceso se detiene inmediatamente cuando Tracker.gg publica el nuevo MMR. Si 
 
 Durante esta vigilancia se pausa temporalmente el polling normal para evitar consultas duplicadas.
 
+### Verificación de Tracker.gg (HTTP 403/429)
+
+Tracker.gg puede pedir una comprobación del navegador o limitar temporalmente las consultas con HTTP `403` o `429`. Si eso ocurre durante el polling normal, el tracker muestra el aviso `Tracker.gg pidió verificación. Se abrirá cuando termine la partida.` y no abre el navegador mientras juegas. Al detectar el fin de la siguiente partida, abre automáticamente `https://rocketleague.tracker.network/` en el navegador predeterminado de Windows, como máximo una vez cada 5 minutos. Si el `403` o `429` ocurre ya durante la vigilancia post-partida, lo abre en ese momento. La vigilancia y sus reintentos continúan sin necesitar un botón ni una confirmación adicional en la aplicación.
+
+La aplicación no resuelve, automatiza ni intenta eludir CAPTCHA alguno: solo abre la página pública de Tracker.gg para que su verificación normal del navegador pueda completarse. Si el sitio exige intervención humana en vez de una comprobación automática, será necesario completar esa verificación directamente en el navegador.
+
 ### Mensajes al terminar una partida
 
 La consola mantiene solo estos mensajes propios del resultado inmediato:

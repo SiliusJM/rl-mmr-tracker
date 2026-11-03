@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -95,6 +95,9 @@ const DEFAULT_CFG = {
   rlStatsApiHost: '127.0.0.1', rlStatsApiPort: 49123,
 };
 
+const TRACKER_HOME_URL = 'https://rocketleague.tracker.network/';
+const TRACKER_RECOVERY_COOLDOWN_MS = 5 * 60 * 1000;
+
 function configPath() { return path.join(__dirname, 'config.json'); }
 function loadConfig() {
   try {
@@ -153,6 +156,8 @@ let lastData = null;
 let lastPublishedResponse = null;
 let lastMatchEndAt = 0;
 let fastPollInProgress = false;
+let lastTrackerRecoveryBrowserAt = 0;
+let trackerVerificationPending = false;
 let rlLocalTeamNum = null;
 let lastHandledMatchGuid = null;
 let hasLiveMmrBaseline = false;
@@ -177,6 +182,24 @@ function createWindow() {
     }
   });
   mainWin.on('closed', () => { isTracking = false; statsApiConnected = false; pollGeneration++; cancelFastPoll(); if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } rlStatsApi.stop(); closeBrowser().catch(() => {}); mainWin = null; });
+}
+
+function isTrackerAccessError(err) {
+  return /Tracker API respondio HTTP (?:403|429)\b/i.test(String(err?.message || err));
+}
+
+function openTrackerRecoveryBrowser() {
+  const now = Date.now();
+  if (now - lastTrackerRecoveryBrowserAt < TRACKER_RECOVERY_COOLDOWN_MS) return false;
+  lastTrackerRecoveryBrowserAt = now;
+
+  // Use Electron's native shell integration, which hands the URL to the user's
+  // configured browser instead of attempting to launch a hidden command prompt.
+  // The app never reads, solves, or attempts to bypass Tracker's challenge.
+  shell.openExternal(TRACKER_HOME_URL)
+    .then(() => sendLog('Tracker.gg pidió verificación. Se abrió Tracker en tu navegador predeterminado.', 'warn'))
+    .catch(error => sendLog(`No se pudo abrir Tracker para la verificación: ${error.message}`, 'warn'));
+  return true;
 }
 
 app.whenReady().then(async () => {
@@ -230,6 +253,11 @@ function startFastPoll() {
   fastPollAttempt = 0;
   const delays = getFastPollDelays();
   sendLog('🏁 Fin de partida detectado. Esperando actualización de Tracker.gg…', 'success');
+  if (trackerVerificationPending) {
+    trackerVerificationPending = false;
+    sendLog('Tracker.gg pidió verificación pendiente. Abriendo Tracker ahora que terminó la partida.', 'warn');
+    openTrackerRecoveryBrowser();
+  }
   scheduleFastPoll(delays[0], generation, 0);
 }
 
@@ -301,7 +329,7 @@ ipcMain.handle('start-tracker', async () => {
   if (!ok) { isTracking = false; sendLog('No se pudo conectar con StreamElements. Verifica el token y el Channel ID.', 'error'); if (mainWin) mainWin.webContents.send('tracker-state', { running: false }); return false; }
   sendLog('Conexión con StreamElements verificada.', 'success');
   if (mainWin) mainWin.webContents.send('tracker-state', { running: true });
-  resetPrevSeasonCache(); lastPublishedResponse = null; lastHandledMatchGuid = null; rlLocalTeamNum = null; cancelFastPoll();
+  resetPrevSeasonCache(); lastPublishedResponse = null; lastHandledMatchGuid = null; rlLocalTeamNum = null; trackerVerificationPending = false; cancelFastPoll();
   hasLiveMmrBaseline = false;
   statsApiConnected = false;
   statsApiEverConnected = false;
@@ -317,7 +345,7 @@ ipcMain.handle('get-status', () => ({ running: isTracking, data: lastData, fastP
 ipcMain.handle('get-modes-cache', () => loadModesCache());
 ipcMain.handle('get-obs-info', () => ({ port: obsServer.getPort() || (loadConfig().obsPort || 3030), running: obsServer.isRunning() }));
 ipcMain.handle('force-poll', () => { if (!isTracking) return false; if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } if (pollInProgress) manualPollPending = true; else setImmediate(() => poll(loadConfig(), { reason: 'manual' })); return true; });
-ipcMain.handle('stop-tracker', () => { isTracking = false; statsApiConnected = false; pollGeneration++; pollImmediatelyAfterCurrent = false; manualPollPending = false; cancelFastPoll(); if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } rlStatsApi.stop(); closeBrowser().catch(() => {}); sendLog('Tracker detenido.', 'info'); if (mainWin) mainWin.webContents.send('tracker-state', { running: false }); return true; });
+ipcMain.handle('stop-tracker', () => { isTracking = false; statsApiConnected = false; pollGeneration++; pollImmediatelyAfterCurrent = false; manualPollPending = false; trackerVerificationPending = false; cancelFastPoll(); if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } rlStatsApi.stop(); closeBrowser().catch(() => {}); sendLog('Tracker detenido.', 'info'); if (mainWin) mainWin.webContents.send('tracker-state', { running: false }); return true; });
 
 async function poll(cfg, meta = {}) {
   if (!isTracking) return null;
@@ -366,6 +394,13 @@ async function poll(cfg, meta = {}) {
     }
   } catch (err) {
     if (!isTracking || generation !== pollGeneration) return null;
+    if (isTrackerAccessError(err)) {
+      if (isFast) openTrackerRecoveryBrowser();
+      else if (!trackerVerificationPending) {
+        trackerVerificationPending = true;
+        sendLog('Tracker.gg pidió verificación. Se abrirá cuando termine la partida.', 'warn');
+      }
+    }
     if (isFast) {
       const delays = getFastPollDelays();
       const nextAttempt = Number(meta.attempt || 0) + 1;
