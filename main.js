@@ -188,17 +188,24 @@ function isTrackerAccessError(err) {
   return /Tracker API respondio HTTP (?:403|429)\b/i.test(String(err?.message || err));
 }
 
-function openTrackerRecoveryBrowser() {
+function openTrackerRecoveryBrowser({ force = false, reason = 'verification' } = {}) {
   const now = Date.now();
-  if (now - lastTrackerRecoveryBrowserAt < TRACKER_RECOVERY_COOLDOWN_MS) return false;
+  if (!force && now - lastTrackerRecoveryBrowserAt < TRACKER_RECOVERY_COOLDOWN_MS) return false;
   lastTrackerRecoveryBrowserAt = now;
+
+  const successMessage = reason === 'startup'
+    ? 'Tracker.gg se abrió en tu navegador predeterminado para sincronizar la información.'
+    : 'Tracker.gg pidió verificación. Se abrió Tracker en tu navegador predeterminado.';
+  const failurePrefix = reason === 'startup'
+    ? 'No se pudo abrir Tracker para sincronizar la información'
+    : 'No se pudo abrir Tracker para la verificación';
 
   // Use Electron's native shell integration, which hands the URL to the user's
   // configured browser instead of attempting to launch a hidden command prompt.
   // The app never reads, solves, or attempts to bypass Tracker's challenge.
   shell.openExternal(TRACKER_HOME_URL)
-    .then(() => sendLog('Tracker.gg pidió verificación. Se abrió Tracker en tu navegador predeterminado.', 'warn'))
-    .catch(error => sendLog(`No se pudo abrir Tracker para la verificación: ${error.message}`, 'warn'));
+    .then(() => sendLog(successMessage, reason === 'startup' ? 'info' : 'warn'))
+    .catch(error => sendLog(`${failurePrefix}: ${error.message}`, 'warn'));
   return true;
 }
 
@@ -328,6 +335,7 @@ ipcMain.handle('start-tracker', async () => {
   const ok = await testStreamElementsConnection(cfg.channelId, cfg.commandName, cfg.streamElementsToken);
   if (!ok) { isTracking = false; sendLog('No se pudo conectar con StreamElements. Verifica el token y el Channel ID.', 'error'); if (mainWin) mainWin.webContents.send('tracker-state', { running: false }); return false; }
   sendLog('Conexión con StreamElements verificada.', 'success');
+  openTrackerRecoveryBrowser({ force: true, reason: 'startup' });
   if (mainWin) mainWin.webContents.send('tracker-state', { running: true });
   resetPrevSeasonCache(); lastPublishedResponse = null; lastHandledMatchGuid = null; rlLocalTeamNum = null; trackerVerificationPending = false; cancelFastPoll();
   hasLiveMmrBaseline = false;
@@ -394,7 +402,8 @@ async function poll(cfg, meta = {}) {
     }
   } catch (err) {
     if (!isTracking || generation !== pollGeneration) return null;
-    if (isTrackerAccessError(err)) {
+    const accessError = isTrackerAccessError(err);
+    if (accessError) {
       if (isFast) openTrackerRecoveryBrowser();
       else if (!trackerVerificationPending) {
         trackerVerificationPending = true;
@@ -405,7 +414,7 @@ async function poll(cfg, meta = {}) {
       const delays = getFastPollDelays();
       const nextAttempt = Number(meta.attempt || 0) + 1;
       if (delays[nextAttempt] != null && meta.generation === fastPollGeneration) { fastPollAttempt = nextAttempt; sendLog(`⚠️ Error de Tracker.gg durante la vigilancia post-partida. Próximo intento en ${delays[nextAttempt] / 1000} s.`, 'warn'); scheduleFastPoll(delays[nextAttempt], meta.generation, nextAttempt); } else { fastPollInProgress = false; sendLog(`Finalizó la vigilancia post-partida por un error de Tracker.gg: ${err.message}`, 'error'); }
-    } else sendLog(err.message, 'error');
+    } else if (!accessError) sendLog(err.message, 'error');
   } finally {
     pollInProgress = false;
     if (isTracking && !fastPollInProgress) {
