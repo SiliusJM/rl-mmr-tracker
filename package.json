@@ -6,6 +6,7 @@
   "scripts": {
     "start": "electron .",
     "start:cli": "node index.js",
+    "test": "node test/mmrConfirmation.test.js && node test/matchLifecycle.test.js",
     "dist": "electron-builder --win --x64",
     "dist:portable": "electron-builder --win portable --x64"
   },
@@ -17,6 +18,8 @@
     "directories": { "output": "dist" },
     "files": [
       "main.js",
+      "mmrConfirmation.js",
+      "matchLifecycle.js",
       "preload.js",
       "renderer/**",
       "streamElements.js",

@@ -13,6 +13,8 @@ const { updateSession, recordMatchResult } = require('./sessionTracker');
 const { scrapeProfile, closeBrowser, resetPrevSeasonCache } = require('./scraper');
 const rlStatsApi = require('./rlStatsApi');
 const obsServer = require('./obs-server');
+const { createNormalMmrConfirmationState, reconcileTrackerMmr } = require('./mmrConfirmation');
+const { createMatchLifecycleState, observeMatch, consumePostMatch, destroyMatch } = require('./matchLifecycle');
 
 process.onUpdateSeasons = (seasons) => {
   if (lastData) {
@@ -44,24 +46,6 @@ function withMmrChanges(modes, previousModes) {
     const mmrDelta = Number.isFinite(current) && Number.isFinite(previous) ? current - previous : null;
     return { ...mode, mmrDelta };
   });
-}
-
-function preserveConfirmedMmr(modes, previousModes, allowChanges) {
-  if (allowChanges || !Array.isArray(previousModes)) return { modes, ignored: [] };
-
-  const previousById = new Map(previousModes.map(mode => [String(mode.id), mode]));
-  const ignored = [];
-  const stableModes = (Array.isArray(modes) ? modes : []).map(mode => {
-    const previous = previousById.get(String(mode.id));
-    const currentMmr = Number(mode.mmr);
-    const previousMmr = Number(previous?.mmr);
-    if (!previous || !Number.isFinite(currentMmr) || !Number.isFinite(previousMmr) || currentMmr === previousMmr) return mode;
-
-    ignored.push(`${mode.name || mode.id}: ${previousMmr} → ${currentMmr}`);
-    return { ...mode, mmr: previous.mmr, rank: previous.rank, iconUrl: previous.iconUrl };
-  });
-
-  return { modes: stableModes, ignored };
 }
 
 function buildResponse(modes, selectedIds, showRecord, session, careerStats, cfg) {
@@ -159,8 +143,9 @@ let fastPollInProgress = false;
 let lastTrackerRecoveryBrowserAt = 0;
 let trackerVerificationPending = false;
 let rlLocalTeamNum = null;
-let lastHandledMatchGuid = null;
 let hasLiveMmrBaseline = false;
+let normalMmrCandidates = createNormalMmrConfirmationState();
+let matchLifecycle = createMatchLifecycleState();
 
 (function initLastDataFromCache() {
   const cached = loadModesCache();
@@ -231,11 +216,8 @@ function cancelFastPoll() {
   if (fastPollTimer) { clearTimeout(fastPollTimer); fastPollTimer = null; }
   fastPollInProgress = false;
 }
-function canAutoPoll() {
-  return statsApiConnected;
-}
 function scheduleNormalPoll() {
-  if (!isTracking || !canAutoPoll() || fastPollInProgress || pollTimer) return;
+  if (!isTracking || fastPollInProgress || pollTimer) return;
   const interval = normalizePollInterval(mergeConfig(loadConfig()).pollInterval);
   pollTimer = setTimeout(() => {
     pollTimer = null;
@@ -247,7 +229,7 @@ function scheduleFastPoll(delayMs, generation, attempt) {
   if (fastPollTimer) clearTimeout(fastPollTimer);
   fastPollTimer = setTimeout(async () => { fastPollTimer = null; if (!isTracking || generation !== fastPollGeneration) return; await poll(loadConfig(), { reason: 'match-end-fast', generation, attempt }); }, delayMs);
 }
-function startFastPoll() {
+function startFastPoll(trigger = 'match-ended') {
   if (!isTracking) return;
   const cfg = mergeConfig(loadConfig());
   if (cfg.fastPollEnabled === false) return;
@@ -259,7 +241,12 @@ function startFastPoll() {
   const generation = fastPollGeneration;
   fastPollAttempt = 0;
   const delays = getFastPollDelays();
-  sendLog('🏁 Fin de partida detectado. Esperando actualización de Tracker.gg…', 'success');
+  sendLog(
+    trigger === 'match-left'
+      ? '🚪 Salida de partida detectada. Esperando actualización de Tracker.gg…'
+      : '🏁 Fin de partida detectado. Esperando actualización de Tracker.gg…',
+    'success'
+  );
   if (trackerVerificationPending) {
     trackerVerificationPending = false;
     sendLog('Tracker.gg pidió verificación pendiente. Abriendo Tracker ahora que terminó la partida.', 'warn');
@@ -300,12 +287,19 @@ async function publishImmediateMatchResult(result) {
 function onStatsApiEvent({ event, data }) {
   const normalized = String(event || '').toLowerCase();
   if (normalized === 'updatestate') { handleStatsUpdate(data); return; }
+  if (normalized === 'matchcreated' || normalized === 'matchinitialized' || normalized === 'roundstarted') {
+    observeMatch(matchLifecycle, data);
+    return;
+  }
+  if (normalized === 'matchdestroyed') {
+    if (destroyMatch(matchLifecycle, data)) startFastPoll('match-left');
+    return;
+  }
   if (normalized !== 'matchended') return;
   if (mergeConfig(loadConfig()).fastPollEnabled === false) return;
-  const matchGuid = data?.MatchGuid || null;
-  if (matchGuid && matchGuid === lastHandledMatchGuid) return;
-  if (matchGuid) lastHandledMatchGuid = matchGuid;
-  startFastPoll();
+  observeMatch(matchLifecycle, data);
+  if (!consumePostMatch(matchLifecycle, data)) return;
+  startFastPoll('match-ended');
   const winnerTeamNum = Number(data?.WinnerTeamNum);
   if (!Number.isInteger(winnerTeamNum) || !Number.isInteger(rlLocalTeamNum)) return;
   const result = winnerTeamNum === rlLocalTeamNum ? 'win' : 'loss';
@@ -337,7 +331,7 @@ ipcMain.handle('start-tracker', async () => {
   sendLog('Conexión con StreamElements verificada.', 'success');
   openTrackerRecoveryBrowser({ force: true, reason: 'startup' });
   if (mainWin) mainWin.webContents.send('tracker-state', { running: true });
-  resetPrevSeasonCache(); lastPublishedResponse = null; lastHandledMatchGuid = null; rlLocalTeamNum = null; trackerVerificationPending = false; cancelFastPoll();
+  resetPrevSeasonCache(); lastPublishedResponse = null; matchLifecycle = createMatchLifecycleState(); normalMmrCandidates = createNormalMmrConfirmationState(); rlLocalTeamNum = null; trackerVerificationPending = false; cancelFastPoll();
   hasLiveMmrBaseline = false;
   statsApiConnected = false;
   statsApiEverConnected = false;
@@ -347,13 +341,14 @@ ipcMain.handle('start-tracker', async () => {
   pollGeneration++;
   rlStatsApi.start({ host: cfg.rlStatsApiHost || '127.0.0.1', port: cfg.rlStatsApiPort || 49123 });
   sendLog(cfg.fastPollEnabled === false ? 'Conexión con Rocket League Stats API iniciada.' : 'Detector de fin de partida iniciado.', 'info');
+  poll(cfg, { reason: 'startup' });
   return true;
 });
 ipcMain.handle('get-status', () => ({ running: isTracking, data: lastData, fastPoll: fastPollInProgress, statsApiConnected: rlStatsApi.isConnected() }));
 ipcMain.handle('get-modes-cache', () => loadModesCache());
 ipcMain.handle('get-obs-info', () => ({ port: obsServer.getPort() || (loadConfig().obsPort || 3030), running: obsServer.isRunning() }));
 ipcMain.handle('force-poll', () => { if (!isTracking) return false; if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } if (pollInProgress) manualPollPending = true; else setImmediate(() => poll(loadConfig(), { reason: 'manual' })); return true; });
-ipcMain.handle('stop-tracker', () => { isTracking = false; statsApiConnected = false; pollGeneration++; pollImmediatelyAfterCurrent = false; manualPollPending = false; trackerVerificationPending = false; cancelFastPoll(); if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } rlStatsApi.stop(); closeBrowser().catch(() => {}); sendLog('Tracker detenido.', 'info'); if (mainWin) mainWin.webContents.send('tracker-state', { running: false }); return true; });
+ipcMain.handle('stop-tracker', () => { isTracking = false; statsApiConnected = false; pollGeneration++; pollImmediatelyAfterCurrent = false; manualPollPending = false; trackerVerificationPending = false; normalMmrCandidates = createNormalMmrConfirmationState(); matchLifecycle = createMatchLifecycleState(); cancelFastPoll(); if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } rlStatsApi.stop(); closeBrowser().catch(() => {}); sendLog('Tracker detenido.', 'info'); if (mainWin) mainWin.webContents.send('tracker-state', { running: false }); return true; });
 
 async function poll(cfg, meta = {}) {
   if (!isTracking) return null;
@@ -365,18 +360,24 @@ async function poll(cfg, meta = {}) {
   }
   const isFast = meta.reason === 'match-end-fast';
   if (!isFast && fastPollInProgress) return null;
-  if (meta.reason !== 'manual' && !canAutoPoll()) return null;
   pollInProgress = true;
   const generation = pollGeneration;
   try {
     const scraped = await scrapeProfile(cfg.platform, cfg.username);
-    if (!isTracking || generation !== pollGeneration || !canAutoPoll()) return null;
-    const acceptedMmr = preserveConfirmedMmr(scraped.modes, lastData?.modes, isFast || !hasLiveMmrBaseline);
+    if (!isTracking || generation !== pollGeneration) return null;
+    const acceptedMmr = reconcileTrackerMmr(scraped.modes, lastData?.modes, {
+      allowChanges: isFast || !hasLiveMmrBaseline,
+      candidates: normalMmrCandidates,
+    });
     const modes = withMmrChanges(acceptedMmr.modes, lastData?.modes);
     hasLiveMmrBaseline = true;
     const careerStats = scraped.careerStats;
     const sessionData = updateSession(modes);
     if (sessionData.events?.length) for (const ev of sessionData.events) sendLog(ev.msg, ev.type);
+    if (!isFast && acceptedMmr.confirmed.length) {
+      const changes = acceptedMmr.confirmed.map(change => `${change.name}: ${change.from} → ${change.to}`).join(' | ');
+      sendLog(`MMR sincronizado con Tracker.gg tras confirmar dos lecturas: ${changes}`, 'success');
+    }
     const selectedIds = cfg.selectedModeIds || [10, 11, 13, 28];
     const showRecord = cfg.showRecord !== false;
     const response = buildResponse(modes, selectedIds, showRecord, sessionData, careerStats, cfg);
@@ -398,7 +399,7 @@ async function poll(cfg, meta = {}) {
         fastPollAttempt = nextAttempt;
         sendLog(`⏳ Tracker.gg todavía no actualiza el MMR. Próximo intento en ${delays[nextAttempt] / 1000} s.`, 'info');
         scheduleFastPoll(delays[nextAttempt], meta.generation, nextAttempt);
-      } else { fastPollInProgress = false; sendLog('Fin de vigilancia post-partida: Tracker.gg todavía no publicó un MMR nuevo después de 5 minutos.', 'warn'); }
+      } else { fastPollInProgress = false; sendLog('Fin de vigilancia post-partida: Tracker.gg todavía no publicó un MMR nuevo antes de agotar los reintentos.', 'warn'); }
     }
   } catch (err) {
     if (!isTracking || generation !== pollGeneration) return null;
@@ -418,7 +419,7 @@ async function poll(cfg, meta = {}) {
   } finally {
     pollInProgress = false;
     if (isTracking && !fastPollInProgress) {
-      if (pollImmediatelyAfterCurrent && canAutoPoll()) {
+      if (pollImmediatelyAfterCurrent) {
         pollImmediatelyAfterCurrent = false;
         manualPollPending = false;
         setImmediate(() => poll(loadConfig(), { reason: 'normal' }));
@@ -443,11 +444,7 @@ rlStatsApi.on('disconnected', () => {
   const wasConnected = statsApiConnected;
   statsApiConnected = false;
   if (!isTracking || !wasConnected) return;
-  pollGeneration++;
-  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
-  cancelFastPoll();
-  pollImmediatelyAfterCurrent = false;
-  sendLog('⚠ Rocket League desconectado. Consultas pausadas.', 'warn');
+  sendLog('⚠ Rocket League desconectado. Tracker.gg seguirá sincronizando; los resultados inmediatos se reanudarán al volver al juego.', 'warn');
 });
 rlStatsApi.on('error', err => { if (err.code !== 'ECONNREFUSED' && err.code !== 'ECONNRESET') sendLog(`Stats API: ${err.message}`, 'warn'); });
 rlStatsApi.on('*', onStatsApiEvent);

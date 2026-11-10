@@ -92,17 +92,17 @@ Selecciona exactamente qué estadísticas incluir:
 
 ## Configuracion de Rocket League Stats API
 
-La deteccion inmediata de victorias y derrotas utiliza la Stats API local de Rocket League. Esto permite que el resultado de la partida se publique en StreamElements sin esperar a que Tracker.gg actualice el MMR.
+La detección inmediata de victorias y derrotas utiliza la Stats API local de Rocket League. Esto permite que el resultado de la partida se publique en StreamElements sin esperar a que Tracker.gg actualice el MMR. El polling de Tracker.gg sigue funcionando aunque Rocket League cierre la conexión local.
 
 ### Archivo de configuracion
 
-En Windows, abre:
+En Windows, abre el archivo dentro de la **carpeta de instalación** de Rocket League. Por ejemplo:
 
 ```text
-C:\Users\SILIUS\Documents\My Games\Rocket League\TAGame\Config\TAStatsAPI.ini
+C:\Program Files\Epic Games\rocketleague\TAGame\Config\TAStatsAPI.ini
 ```
 
-> Si tu carpeta de usuario de Windows tiene otro nombre, sustituye `SILIUS` por tu nombre de usuario de Windows.
+En Steam suele estar en `C:\Program Files (x86)\Steam\steamapps\common\rocketleague\TAGame\Config\TAStatsAPI.ini`. Si `TAStatsAPI.ini` no existe, edita `DefaultStatsAPI.ini` en esa misma carpeta. No uses la copia de `Documents\My Games`: la Stats API oficial se configura en la instalación del juego.
 
 El archivo debe contener al menos:
 
@@ -126,14 +126,14 @@ PacketSendRate=10
 4. Inicia RL MMR Tracker.
 5. Verifica en el log que aparezca:
    ```text
-   Rocket League Stats API conectada. Detección de fin de partida activa.
+   Rocket League Stats API conectada. Polling de Tracker.gg iniciado.
    ```
 
 No es necesario cambiar `Port=49123` ni `WebPort=49124` salvo que tengas una configuración diferente de forma intencionada.
 
 ### ¿Qué hace la Stats API?
 
-Cuando termina una partida, Rocket League informa el resultado al tracker mediante la conexión local. El programa puede entonces actualizar inmediatamente el contador `📊 Hoy: X Ganados - Y Perdidos`. Tracker.gg sigue consultándose por separado para obtener el nuevo MMR.
+Cuando termina una partida, Rocket League informa el resultado al tracker mediante la conexión local. El programa puede entonces actualizar inmediatamente el contador `📊 Hoy: X Ganados - Y Perdidos`. Si sales de una partida después de que termina pero antes de permanecer en la pantalla final, Rocket League envía `MatchDestroyed`: el tracker inicia igualmente la vigilancia de MMR. Tracker.gg sigue consultándose por separado para obtener el nuevo MMR.
 
 ---
 
@@ -169,7 +169,7 @@ StreamElements funciona tanto si vinculaste Twitch como YouTube. Cada plataforma
 
 El intervalo normal por defecto es de **30 segundos**. Se mantiene un minimo efectivo de 30 segundos y un maximo de 10 minutos para evitar consultas innecesarias a Tracker.gg.
 
-Durante una partida, el tracker no necesita consultar continuamente Tracker.gg para conocer el resultado: la Stats API local informa el final de la partida. Al terminar, se activa una vigilancia especifica de Tracker.gg para detectar el nuevo MMR.
+Durante una partida, la Stats API local informa el final para activar una vigilancia rápida de Tracker.gg. Si se pierde ese evento al salir pronto, el evento de salida de partida también la activa. Si Rocket League se desconecta por completo, el polling normal de Tracker.gg continúa para que el MMR no quede congelado.
 
 Los overlays de OBS ya no hacen una consulta repetida cada 5 segundos. Mantienen una conexion local ligera con el tracker y se actualizan solo cuando cambian los datos visibles.
 
@@ -181,9 +181,13 @@ Las consultas rapidas se realizan con este esquema:
 2 / 2 / 4 / 4 / 7 / 7 / 12 / 12 / 20 / 20 / 30 / 30 / 45 / 45 / 60 / 90 / 120 / 180 / 240 / 300s
 ```
 
-El proceso se detiene inmediatamente cuando Tracker.gg publica el nuevo MMR. Si no hay cambio, continua hasta un maximo de 5 minutos.
+El proceso se detiene inmediatamente cuando Tracker.gg publica el nuevo MMR. Si no hay cambio, continúa hasta agotar la secuencia de reintentos.
 
 Durante esta vigilancia se pausa temporalmente el polling normal para evitar consultas duplicadas.
+
+### Respaldo si falta un evento de Rocket League
+
+Para evitar que una salida rápida obligue a detener e iniciar la aplicación, las lecturas normales también pueden sincronizar el MMR. Un cambio se acepta solo cuando Tracker.gg devuelve el mismo valor en **dos lecturas consecutivas**. Así se corrige un MMR realmente actualizado aunque no llegue `MatchEnded`, sin aceptar una lectura aislada u obsoleta como una victoria o derrota.
 
 ### Verificación de Tracker.gg (HTTP 403/429)
 
@@ -212,7 +216,9 @@ Los mensajes de las consultas de Tracker.gg y del resto del tracker permanecen s
 
 ### ¿Cuanto tarda en actualizarse el MMR?
 
-El resultado Ganado/Perdido puede actualizarse inmediatamente gracias a Rocket League Stats API. El MMR depende de cuando Tracker.gg publique el cambio. La app lo consulta con la vigilancia post-partida anterior y lo actualiza en cuanto aparece.
+El resultado Ganado/Perdido puede actualizarse inmediatamente gracias a Rocket League Stats API. El MMR depende de cuándo Tracker.gg publique el cambio. En el registro de prueba compartido, el programa confirmó el nuevo MMR en un promedio de **50 segundos** (mediana: **23 segundos**) después de detectar el fin o la salida de la partida. En las 7 partidas con evento de fin, el promedio fue de **29 segundos**; las 2 salidas anticipadas se sincronizaron en **44 segundos** y **3 minutos 24 segundos** (promedio: **2 minutos 4 segundos**).
+
+Estos tiempos miden desde el evento de Rocket League hasta que el programa vio y registró el nuevo MMR; el log no permite saber el instante exacto en que Tracker.gg lo publicó internamente. Dos ajustes adicionales hechos por el respaldo de lecturas normales no tenían un evento de fin cercano en el log, por eso no se incluyeron en el promedio.
 
 ### Consumo de recursos
 
