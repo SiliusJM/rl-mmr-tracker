@@ -195,6 +195,8 @@ Tracker.gg puede pedir una comprobación del navegador o limitar temporalmente l
 
 La aplicación no resuelve, automatiza ni intenta eludir CAPTCHA alguno: solo abre la página pública de Tracker.gg para que su verificación normal del navegador pueda completarse. Si el sitio exige intervención humana en vez de una comprobación automática, será necesario completar esa verificación directamente en el navegador.
 
+En una sesión real de **30 partidas clasificatorias 3v3** (15:42–17:59), Tracker.gg solicitó verificación en **6 ocasiones**. El intervalo entre solicitudes consecutivas fue de **20:05, 20:04, 23:26, 24:18 y 20:16**, con un promedio de **21 minutos 38 segundos**. La apertura inicial del navegador al pulsar **INICIAR** no se cuenta como una solicitud de verificación.
+
 ### Mensajes al terminar una partida
 
 La consola mantiene solo estos mensajes propios del resultado inmediato:
@@ -214,11 +216,11 @@ Para una victoria, el segundo mensaje sera:
 
 Los mensajes de las consultas de Tracker.gg y del resto del tracker permanecen sin cambios.
 
-### ¿Cuanto tarda en actualizarse el MMR?
+### ¿Cuántas veces se actualizó el MMR y cuánto tardó?
 
-El resultado Ganado/Perdido puede actualizarse inmediatamente gracias a Rocket League Stats API. El MMR depende de cuándo Tracker.gg publique el cambio. En el registro de prueba compartido, el programa confirmó el nuevo MMR en un promedio de **50 segundos** (mediana: **23 segundos**) después de detectar el fin o la salida de la partida. En las 7 partidas con evento de fin, el promedio fue de **29 segundos**; las 2 salidas anticipadas se sincronizaron en **44 segundos** y **3 minutos 24 segundos** (promedio: **2 minutos 4 segundos**).
+En el registro de **30 partidas clasificatorias reales de 3v3**, el MMR se actualizó o corrigió **30 veces**: **20** cambios quedaron asociados a un evento registrado de fin o salida de partida y **10** se sincronizaron mediante la comprobación de dos lecturas normales consecutivas. El registro repite una vez el bloque de 16:45–16:50; esa copia se excluyó del conteo.
 
-Estos tiempos miden desde el evento de Rocket League hasta que el programa vio y registró el nuevo MMR; el log no permite saber el instante exacto en que Tracker.gg lo publicó internamente. Dos ajustes adicionales hechos por el respaldo de lecturas normales no tenían un evento de fin cercano en el log, por eso no se incluyeron en el promedio.
+Para las **20 partidas con hora de fin/salida y hora de confirmación visibles**, la espera hasta que la aplicación detectó el nuevo MMR de Tracker.gg promedió **54 segundos**. La espera máxima fue **3 minutos 24 segundos (204 segundos)**. Estas duraciones se miden desde el evento de Rocket League hasta la confirmación que muestra el programa; el registro no revela el instante exacto en que Tracker.gg publicó internamente los puntos. Los 10 cambios sincronizados por lecturas normales no se incluyen en el promedio porque no tienen un evento de fin identificable para medir su espera.
 
 ### Consumo de recursos
 
